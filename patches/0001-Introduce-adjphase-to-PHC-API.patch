@@ -1,0 +1,74 @@
+From a9c618fb563efbbd97dc99837801b5434ffc39ea Mon Sep 17 00:00:00 2001
+From: Vincent Cheng <vincent.cheng.xh@renesas.com>
+Date: Thu, 26 Aug 2021 11:38:09 -0400
+Subject: [PATCH] Introduce adjphase to PHC API
+
+---
+ drivers/ptp/ptp_chardev.c        | 1 +
+ drivers/ptp/ptp_clock.c          | 9 +++++++++
+ include/linux/ptp_clock_kernel.h | 1 +
+ include/uapi/linux/ptp_clock.h   | 4 +++-
+ 4 files changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/ptp/ptp_chardev.c b/drivers/ptp/ptp_chardev.c
+index 58a97d420572..05aaedbffbf1 100644
+--- a/drivers/ptp/ptp_chardev.c
++++ b/drivers/ptp/ptp_chardev.c
+@@ -142,6 +142,7 @@ long ptp_ioctl(struct posix_clock *pc, unsigned int cmd, unsigned long arg)
+ 		caps.pps = ptp->info->pps;
+ 		caps.n_pins = ptp->info->n_pins;
+ 		caps.cross_timestamping = ptp->info->getcrosststamp != NULL;
++		caps.adjust_phase = ptp->info->adjphase != NULL;
+ 		if (copy_to_user((void __user *)arg, &caps, sizeof(caps)))
+ 			err = -EFAULT;
+ 		break;
+diff --git a/drivers/ptp/ptp_clock.c b/drivers/ptp/ptp_clock.c
+index 7eacc1c4b3b1..6ce2f932f293 100644
+--- a/drivers/ptp/ptp_clock.c
++++ b/drivers/ptp/ptp_clock.c
+@@ -155,6 +155,15 @@ static int ptp_clock_adjtime(struct posix_clock *pc, struct timex *tx)
+ 		else
+ 			err = ops->adjfreq(ops, ppb);
+ 		ptp->dialed_frequency = tx->freq;
++	} else if (tx->modes & ADJ_OFFSET) {
++		if (ops->adjphase) {
++			s32 offset = tx->offset;
++
++			if (!(tx->modes & ADJ_NANO))
++				offset *= NSEC_PER_USEC;
++
++			err = ops->adjphase(ops, offset);
++		}
+ 	} else if (tx->modes == 0) {
+ 		tx->freq = ptp->dialed_frequency;
+ 		err = 0;
+diff --git a/include/linux/ptp_clock_kernel.h b/include/linux/ptp_clock_kernel.h
+index 51349d124ee5..d2bc92907a59 100644
+--- a/include/linux/ptp_clock_kernel.h
++++ b/include/linux/ptp_clock_kernel.h
+@@ -122,6 +122,7 @@ struct ptp_clock_info {
+ 	struct ptp_pin_desc *pin_config;
+ 	int (*adjfine)(struct ptp_clock_info *ptp, long scaled_ppm);
+ 	int (*adjfreq)(struct ptp_clock_info *ptp, s32 delta);
++	int (*adjphase)(struct ptp_clock_info *ptp, s32 phase);
+ 	int (*adjtime)(struct ptp_clock_info *ptp, s64 delta);
+ 	int (*gettime64)(struct ptp_clock_info *ptp, struct timespec64 *ts);
+ 	int (*getcrosststamp)(struct ptp_clock_info *ptp,
+diff --git a/include/uapi/linux/ptp_clock.h b/include/uapi/linux/ptp_clock.h
+index 3039bf6a742e..c88cf64b84f5 100644
+--- a/include/uapi/linux/ptp_clock.h
++++ b/include/uapi/linux/ptp_clock.h
+@@ -54,7 +54,9 @@ struct ptp_clock_caps {
+ 	int n_pins;    /* Number of input/output pins. */
+ 	/* Whether the clock supports precise system-device cross timestamps */
+ 	int cross_timestamping;
+-	int rsv[13];   /* Reserved for future use. */
++	/* Whether the clock supports adjust phase */
++	int adjust_phase;
++	int rsv[12];   /* Reserved for future use. */
+ };
+ 
+ struct ptp_extts_request {
+-- 
+2.31.1
+

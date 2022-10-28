@@ -1,0 +1,31 @@
+From c9151b21b21fb972a1a6d5c7ed9c13a7963c1ce1 Mon Sep 17 00:00:00 2001
+From: Vincent Cheng <vincent.cheng.xh@renesas.com>
+Date: Tue, 25 Oct 2022 08:37:16 -0400
+Subject: [PATCH] Change spi remove func return void
+
+---
+ drivers/mfd/rsmu_spi.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/drivers/mfd/rsmu_spi.c b/drivers/mfd/rsmu_spi.c
+index 79edc2d6133c..efece6f764a9 100644
+--- a/drivers/mfd/rsmu_spi.c
++++ b/drivers/mfd/rsmu_spi.c
+@@ -234,13 +234,11 @@ static int rsmu_spi_probe(struct spi_device *client)
+ 	return rsmu_core_init(rsmu);
+ }
+ 
+-static int rsmu_spi_remove(struct spi_device *client)
++static void rsmu_spi_remove(struct spi_device *client)
+ {
+ 	struct rsmu_ddata *rsmu = spi_get_drvdata(client);
+ 
+ 	rsmu_core_exit(rsmu);
+-
+-	return 0;
+ }
+ 
+ static const struct spi_device_id rsmu_spi_id[] = {
+-- 
+2.34.1
+
