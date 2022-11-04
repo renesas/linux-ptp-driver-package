@@ -37,6 +37,13 @@ struct rsmu_holdover_mode {
   __u8 mode;
 };
 
+/* Set output TDC go bit */
+struct rsmu_set_output_tdc_go
+{
+  __u8 tdc;
+  __u8 enable;
+};
+
 /* Get register */
 struct rsmu_reg_rw {
 	__u32 offset;
@@ -86,6 +93,15 @@ struct rsmu_reg_rw {
  * pointer to struct rsmu_set_holdover_mode that contains enable flag
  */
 #define RSMU_SET_HOLDOVER_MODE  _IOW(RSMU_MAGIC, 4, struct rsmu_holdover_mode)
+
+/**
+ * @Description
+ * ioctl to set the output TDC 'go' bit.
+ *
+ * @Parameters
+ * pointer to struct rsmu_set_output_tdc_go that contains enable flag
+ */
+#define RSMU_SET_OUTPUT_TDC_GO  _IOW( RSMU_MAGIC, 5, struct rsmu_set_output_tdc_go )
 
 #define RSMU_REG_READ  _IOR(RSMU_MAGIC, 100, struct rsmu_reg_rw)
 #define RSMU_REG_WRITE _IOR(RSMU_MAGIC, 101, struct rsmu_reg_rw)

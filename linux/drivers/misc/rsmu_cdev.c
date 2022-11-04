@@ -120,6 +120,26 @@ rsmu_set_holdover_mode(struct rsmu_cdev *rsmu, void __user *arg)
 }
 
 static int
+rsmu_set_output_tdc_go(struct rsmu_cdev *rsmu, void __user *arg)
+{
+	struct rsmu_ops *ops = rsmu->ops;
+	struct rsmu_set_output_tdc_go request;
+	int err;
+
+	if (copy_from_user(&request, arg, sizeof(request)))
+		return -EFAULT;
+
+	if (ops->set_output_tdc_go == NULL)
+		return -ENOTSUPP;
+
+	mutex_lock(rsmu->lock);
+	err = ops->set_output_tdc_go(rsmu, request.tdc, request.enable);
+	mutex_unlock(rsmu->lock);
+
+	return err;
+}
+
+static int
 rsmu_reg_read(struct rsmu_cdev *rsmu, void __user *arg)
 {
 	struct rsmu_reg_rw data;
@@ -178,6 +198,9 @@ rsmu_ioctl(struct file *fptr, unsigned int cmd, unsigned long data)
 		break;
 	case RSMU_SET_HOLDOVER_MODE:
 		err = rsmu_set_holdover_mode(rsmu, arg);
+		break;
+	case RSMU_SET_OUTPUT_TDC_GO:
+		err = rsmu_set_output_tdc_go(rsmu, arg);
 		break;
 	case RSMU_REG_READ:
 		err = rsmu_reg_read(rsmu, arg);

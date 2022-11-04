@@ -135,6 +135,45 @@ static int rsmu_cm_set_holdover_mode(struct rsmu_cdev *rsmu, u8 dpll, u8 enable,
 				 &reg, sizeof(reg));
 }
 
+static int rsmu_cm_set_output_tdc_go(struct rsmu_cdev *rsmu, u8 tdc, u8 enable)
+{
+	/* This function enable or disable the output TDC alignment. */
+	u8 tdc_ctrl4_offset;
+	u32 tdc_n;
+	u8 reg;
+	int err;
+
+	tdc_ctrl4_offset = IDTCM_FW_REG(rsmu->fw_version, V520, OUTPUT_TDC_CTRL_4);
+
+	switch (tdc) {
+	case 0:
+		tdc_n = OUTPUT_TDC_0;
+		break;
+	case 1:
+		tdc_n = OUTPUT_TDC_1;
+		break;
+	case 2:
+		tdc_n = OUTPUT_TDC_2;
+		break;
+	case 3:
+		tdc_n = OUTPUT_TDC_3;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	err = regmap_bulk_read(rsmu->regmap, tdc_n + tdc_ctrl4_offset,
+			       &reg, sizeof(reg));
+
+	if (enable)
+		reg |= 0x01;
+	else
+		reg &= ~0x01;
+
+	return regmap_bulk_write(rsmu->regmap, tdc_n + tdc_ctrl4_offset,
+				 &reg, sizeof(reg));
+}
+
 static int rsmu_cm_get_dpll_state(struct rsmu_cdev *rsmu, u8 dpll, u8 *state)
 {
 	u8 cfg;
@@ -266,5 +305,6 @@ struct rsmu_ops cm_ops = {
 	.get_dpll_state = rsmu_cm_get_dpll_state,
 	.get_dpll_ffo = rsmu_cm_get_dpll_ffo,
 	.set_holdover_mode = rsmu_cm_set_holdover_mode,
+	.set_output_tdc_go = rsmu_cm_set_output_tdc_go,
 	.get_fw_version = rsmu_cm_get_fw_version,
 };

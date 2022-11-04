@@ -86,6 +86,8 @@ struct rsmu_ops {
 			    struct rsmu_get_ffo *ffo);
 	int (*set_holdover_mode)(struct rsmu_cdev *rsmu, u8 dpll,
 				 u8 enable, u8 mode);
+	int (*set_output_tdc_go)(struct rsmu_cdev *rsmu, u8 tdc,
+				 u8 enable);
 };
 
 /**

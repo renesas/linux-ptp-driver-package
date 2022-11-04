@@ -1,4 +1,5 @@
-commit edb198a0f09f9712b251b2988ac00fa1d12fe42a
-Date:   Wed Oct 26 10:14:25 2022 -0400
+commit 3ada7c24fb578199b251d886bbd06531d351e07a (HEAD -> develop, origin/develop)
+Date:   Wed Nov 2 12:50:29 2022 -0400
 
-    [STEELBD-6617]: add tcs/bin support for ZCU670/216
+    [STEELBD-6667] Misc driver: Implement function to set the output TDC 'go' bit
+
