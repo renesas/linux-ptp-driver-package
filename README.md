@@ -40,7 +40,7 @@ Microsoft Studio Code (https://code.visualstudio.com/) can be used to view a ren
    * [Update device tree in Kernel](#update-device-tree)
    * [Test Compile Drivers](#test-compile-drivers)
    * [Sample Session Output](#sample-session-output)
-5. [Example Loading of Drivers on Xilinx ZCU102 Board](#example-loading-of-drivers-on-xilinx-zcu102-board)
+5. [Example Loading of Drivers on Xilinx ZCU670 Board](#example-loading-of-drivers-on-xilinx-zcu670-board)
 6. [Next Steps](#next-steps)
 
 # Repository Structure
@@ -536,55 +536,57 @@ $ make -j $(nproc) drivers/misc/
   LD [M]  drivers/misc/rsmu.o
 ```
 
-# Example Loading of Drivers on Xilinx ZCU102 Board
+# Example Loading of Drivers on Xilinx ZCU670 Board
 ```
 #
 # Before loading drivers
 #
-root@pl_eth_1g_ptp_zcu102_cm:/# lsmod
+root@xilinx-zcu670-2021_2:~# lsmod
     Tainted: G
-macb 53248 0 - Live 0xffffff8000a60000
-uio_pdrv_genirq 16384 0 - Live 0xffffff8000a50000
+macb 53248 0 - Live 0xffff800008dcb000
+phylink 28672 1 macb, Live 0xffff800008dbd000
+uio_pdrv_genirq 16384 0 - Live 0xffff800008db0000
 
 #
 # Load MFD/MISC driver
 #
-root@pl_eth_1g_ptp_zcu102_cm:/# modprobe rsmu-i2c
-[629114.760375] rsmu-cdev 82p33x1x-cdev.1.auto: Probe rsmu0 successful
-[629114.766984] rsmu-cdev 8a3400x-cdev.3.auto: Probe rsmu1 successful
+root@xilinx-zcu670-2021_2:~# modprobe rsmu-i2c
+root@xilinx-zcu670-2021_2:~# [  428.631925] rsmu-cdev 8a3400x-cdev.2.auto: Probe rsmu0 successful
 
 #
 # After loading MFD/MISC driver
 #
-root@pl_eth_1g_ptp_zcu102_cm:/# lsmod
+root@xilinx-zcu670-2021_2:~# lsmod
     Tainted: G
-rsmu 16384 0 - Live 0xffffff8000a76000 (O)
-rsmu_i2c 16384 0 - Live 0xffffff8000a6e000 (O)
-macb 53248 0 - Live 0xffffff8000a60000
-uio_pdrv_genirq 16384 0 - Live 0xffffff8000a50000
+rsmu 20480 0 - Live 0xffff800008dd9000 (O)
+rsmu_i2c 16384 0 - Live 0xffff800008db5000 (O)
+macb 53248 0 - Live 0xffff800008dcb000
+phylink 28672 1 macb, Live 0xffff800008dbd000
+uio_pdrv_genirq 16384 0 - Live 0xffff800008db0000
 
 #
 # Load PTP driver
 #
-root@pl_eth_1g_ptp_zcu102_cm:/# modprobe ptp_clockmatrix firmware=idtcm.bin.8A3400x_G.8275.2_APTS_50MHz_v4_propinteg
-[214578.372291] 8a3400x-phc 8a3400x-phc.0.auto: 4.8.7, Id: 0x4001  HW Rev: 5  OTP Config Select: 15
-[214578.381078] 8a3400x-phc 8a3400x-phc.0.auto: requesting firmware 'idtcm.bin.8A3400x_G.8275.2_APTS_50MHz_v4_propinteg'
-[214581.606475] 8a3400x-phc 8a3400x-phc.0.auto: PLL2 registered as ptp1
+root@xilinx-zcu670-2021_2:~# modprobe ptp_clockmatrix firmware=idtcm.bin.zcu670
+[  486.598698] 8a3400x-phc 8a3400x-phc.1.auto: 4.8.8, Id: 0x4001  HW Rev: 5  OTP Config Select: 15
+[  486.607406] 8a3400x-phc 8a3400x-phc.1.auto: requesting firmware 'idtcm.bin.zcu670'
+[  490.404990] 8a3400x-phc 8a3400x-phc.1.auto: PLL1 registered as ptp1
 
 #
 # After loading PTP driver
 #
-root@pl_eth_1g_ptp_zcu102_cm:/# lsmod
+root@xilinx-zcu670-2021_2:~# lsmod
     Tainted: G
-ptp_clockmatrix 32768 0 - Live 0xffffff8000a7e000 (O)
-rsmu 16384 0 - Live 0xffffff8000a76000 (O)
-rsmu_i2c 16384 0 - Live 0xffffff8000a6e000 (O)
-macb 53248 0 - Live 0xffffff8000a60000
-uio_pdrv_genirq 16384 0 - Live 0xffffff8000a50000
+ptp_clockmatrix 32768 0 - Live 0xffff800008ddf000 (O)
+rsmu 20480 0 - Live 0xffff800008dd9000 (O)
+rsmu_i2c 16384 0 - Live 0xffff800008db5000 (O)
+macb 53248 0 - Live 0xffff800008dcb000
+phylink 28672 1 macb, Live 0xffff800008dbd000
+uio_pdrv_genirq 16384 0 - Live 0xffff800008db0000
 
 # Check PTP clock name for ClockMatrix
-root@pl_eth_1g_ptp_zcu102_cm:/# cat /sys/class/ptp/ptp1/clock_name
-IDT CM TOD2
+root@xilinx-zcu670-2021_2:~# cat /sys/class/ptp/ptp1/clock_name
+IDT CM TOD1
 ```
 # Next Steps
 
