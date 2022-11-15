@@ -1,5 +1,6 @@
-commit 3ada7c24fb578199b251d886bbd06531d351e07a (HEAD -> develop, origin/develop)
-Date:   Wed Nov 2 12:50:29 2022 -0400
+commit b48523fcd348d7e7b9553ff190d4c0d99407ac3e (HEAD -> develop, origin/develop)
 
-    [STEELBD-6667] Misc driver: Implement function to set the output TDC 'go' bit
+Date:   Fri Nov 4 15:52:32 2022 -0400
+
+    [STEELAI-704] rsmu: call regmap_exit() on exit
 
