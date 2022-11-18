@@ -1396,18 +1396,18 @@ static int idtcm_set_pll_mode(struct idtcm_channel *channel,
 	struct idtcm *idtcm = channel->idtcm;
 	int err;
 	u8 dpll_mode;
-	u8 timeout = 0;
+	u8 buf[2] = {0};
 
 	/* Setup WF/WP timer for phase pull-in to work correctly */
 	err = idtcm_write(idtcm, channel->dpll_n, DPLL_WF_TIMER,
-			  &timeout, sizeof(timeout));
+			  buf, sizeof(buf));
 	if (err)
 		return err;
 
 	if (mode == PLL_MODE_WRITE_PHASE)
-		timeout = 160;
+		buf[0] = 160;
 	err = idtcm_write(idtcm, channel->dpll_n, DPLL_WP_TIMER,
-			  &timeout, sizeof(timeout));
+			  buf, sizeof(buf));
 	if (err)
 		return err;
 
