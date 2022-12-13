@@ -1,6 +1,8 @@
-commit b48523fcd348d7e7b9553ff190d4c0d99407ac3e (HEAD -> develop, origin/develop)
+commit e998741f9033843a65f4ceac2fd0f2062e2c66aa
 
-Date:   Fri Nov 4 15:52:32 2022 -0400
+Date:   Tue Dec 13 10:39:41 2022 -0500
 
-    [STEELAI-704] rsmu: call regmap_exit() on exit
+    [STEELAI-715] remove calling regmap_exit() since it will crash rmmod
+    
+    This reverts commit b48523fcd348d7e7b9553ff190d4c0d99407ac3e.
 
