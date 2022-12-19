@@ -18,9 +18,16 @@
 #include "rsmu.h"
 
 #define	RSMU_CM_PAGE_ADDR		0x7C
+#define	RSMU_CM_PAGE_MASK		0xFFFFFF80
+#define	RSMU_CM_ADDR_MASK		0x7F
+
 #define	RSMU_SABRE_PAGE_ADDR		0x7F
-#define	RSMU_PAGE_MASK			0xFFFFFF80
-#define	RSMU_ADDR_MASK			0x7F
+#define RSMU_SABRE_PAGE_MASK		0xFFFFFF80
+#define RSMU_SABRE_ADDR_MASK		0x7F
+
+#define	RSMU_FC3_PAGE_ADDR		0x7C
+#define	RSMU_FC3_PAGE_MASK		0xFFFFFF80
+#define	RSMU_FC3_ADDR_MASK		0x7F
 
 static int rsmu_read_device(struct rsmu_ddata *rsmu, u8 reg, u8 *buf, u16 bytes)
 {
@@ -105,7 +112,7 @@ static int rsmu_write_page_register(struct rsmu_ddata *rsmu, u32 reg)
 		if (reg < RSMU_CM_SCSR_BASE)
 			return 0;
 		page_reg = RSMU_CM_PAGE_ADDR;
-		page = reg & RSMU_PAGE_MASK;
+		page = reg & RSMU_CM_PAGE_MASK;
 		buf[0] = (u8)(page & 0xFF);
 		buf[1] = (u8)((page >> 8) & 0xFF);
 		buf[2] = (u8)((page >> 16) & 0xFF);
@@ -114,13 +121,22 @@ static int rsmu_write_page_register(struct rsmu_ddata *rsmu, u32 reg)
 		break;
 	case RSMU_SABRE:
 		/* Do not modify page register if reg is page register itself */
-		if ((reg & RSMU_ADDR_MASK) == RSMU_ADDR_MASK)
+		if ((reg & RSMU_SABRE_ADDR_MASK) == RSMU_SABRE_ADDR_MASK)
 			return 0;
 		page_reg = RSMU_SABRE_PAGE_ADDR;
-		page = reg & RSMU_PAGE_MASK;
+		page = reg & RSMU_SABRE_PAGE_MASK;
 		/* The three page bits are located in the single Page Register */
 		buf[0] = (u8)((page >> 7) & 0x7);
 		bytes = 1;
+		break;
+	case RSMU_FC3:
+		page_reg = RSMU_FC3_PAGE_ADDR;
+		page = reg & RSMU_FC3_PAGE_MASK;
+		buf[0] = (u8)(page & 0xFF);
+		buf[1] = (u8)((page >> 8) & 0xFF);
+		buf[2] = (u8)((page >> 16) & 0xFF);
+		buf[3] = (u8)((page >> 24) & 0xFF);
+		bytes = 4;
 		break;
 	default:
 		dev_err(rsmu->dev, "Unsupported RSMU device type: %d\n", rsmu->type);
@@ -144,8 +160,23 @@ static int rsmu_write_page_register(struct rsmu_ddata *rsmu, u32 reg)
 static int rsmu_reg_read(void *context, unsigned int reg, unsigned int *val)
 {
 	struct rsmu_ddata *rsmu = spi_get_drvdata((struct spi_device *)context);
-	u8 addr = (u8)(reg & RSMU_ADDR_MASK);
+	u8 addr;
 	int err;
+
+	switch (rsmu->type) {
+	case RSMU_CM:
+		addr = (u8)(reg & RSMU_CM_ADDR_MASK);
+		break;
+	case RSMU_SABRE:
+		addr = (u8)(reg & RSMU_SABRE_ADDR_MASK);
+		break;
+	case RSMU_FC3:
+		addr = (u8)(reg & RSMU_FC3_ADDR_MASK);
+		break;
+	default:
+		dev_err(rsmu->dev, "Unsupported RSMU device type: %d\n", rsmu->type);
+		return -ENODEV;
+	}
 
 	err = rsmu_write_page_register(rsmu, reg);
 	if (err)
@@ -161,9 +192,24 @@ static int rsmu_reg_read(void *context, unsigned int reg, unsigned int *val)
 static int rsmu_reg_write(void *context, unsigned int reg, unsigned int val)
 {
 	struct rsmu_ddata *rsmu = spi_get_drvdata((struct spi_device *)context);
-	u8 addr = (u8)(reg & RSMU_ADDR_MASK);
+	u8 addr;
 	u8 data = (u8)val;
 	int err;
+
+	switch (rsmu->type) {
+	case RSMU_CM:
+		addr = (u8)(reg & RSMU_CM_ADDR_MASK);
+		break;
+	case RSMU_SABRE:
+		addr = (u8)(reg & RSMU_SABRE_ADDR_MASK);
+		break;
+	case RSMU_FC3:
+		addr = (u8)(reg & RSMU_FC3_ADDR_MASK);
+		break;
+	default:
+		dev_err(rsmu->dev, "Unsupported RSMU device type: %d\n", rsmu->type);
+		return -ENODEV;
+	}
 
 	err = rsmu_write_page_register(rsmu, reg);
 	if (err)
@@ -195,6 +241,15 @@ static const struct regmap_config rsmu_sabre_regmap_config = {
 	.cache_type = REGCACHE_NONE,
 };
 
+static const struct regmap_config rsmu_fc3_regmap_config = {
+	.reg_bits = 32,
+	.val_bits = 8,
+	.max_register = 0xFFF,
+	.reg_read = rsmu_reg_read,
+	.reg_write = rsmu_reg_write,
+	.cache_type = REGCACHE_NONE,
+};
+
 static int rsmu_spi_probe(struct spi_device *client)
 {
 	const struct spi_device_id *id = spi_get_device_id(client);
@@ -218,6 +273,9 @@ static int rsmu_spi_probe(struct spi_device *client)
 		break;
 	case RSMU_SABRE:
 		cfg = &rsmu_sabre_regmap_config;
+		break;
+	case RSMU_FC3:
+		cfg = &rsmu_fc3_regmap_config;
 		break;
 	default:
 		dev_err(rsmu->dev, "Unsupported RSMU device type: %d\n", rsmu->type);
@@ -248,6 +306,8 @@ static const struct spi_device_id rsmu_spi_id[] = {
 	{ "8a34001",  RSMU_CM },
 	{ "82p33810", RSMU_SABRE },
 	{ "82p33811", RSMU_SABRE },
+	{ "rc32312", RSMU_FC3 },
+	{ "rc32308", RSMU_FC3 },
 	{}
 };
 MODULE_DEVICE_TABLE(spi, rsmu_spi_id);
@@ -257,6 +317,8 @@ static const struct of_device_id rsmu_spi_of_match[] = {
 	{ .compatible = "idt,8a34001",  .data = (void *)RSMU_CM },
 	{ .compatible = "idt,82p33810", .data = (void *)RSMU_SABRE },
 	{ .compatible = "idt,82p33811", .data = (void *)RSMU_SABRE },
+	{ .compatible = "idt,rc32312", .data = (void *)RSMU_FC3 },
+	{ .compatible = "idt,rc32308", .data = (void *)RSMU_FC3 },
 	{}
 };
 MODULE_DEVICE_TABLE(of, rsmu_spi_of_match);
