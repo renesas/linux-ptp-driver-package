@@ -23,7 +23,7 @@
  */
 #define	RSMU_CM_PAGE_ADDR		0xFC
 #define RSMU_CM_PAGE_MASK		0xFFFFFF00
-#define RSMU_CM_ADDRESS_MASK		0x000000FF
+#define RSMU_CM_ADDR_MASK		0x000000FF
 
 /*
  * 15-bit register address: the lower 7 bits of the register address come
@@ -31,6 +31,10 @@
  */
 #define	RSMU_SABRE_PAGE_ADDR		0x7F
 #define	RSMU_SABRE_PAGE_WINDOW		128
+
+#define RSMU_FC3_PAGE_ADDR		0xFC
+#define RSMU_FC3_PAGE_MASK		0xFFFFFF00
+#define RSMU_FC3_ADDR_MASK		0x000000FF
 
 typedef int (*rsmu_rw_device)(struct rsmu_ddata *rsmu, u8 reg, u8 *buf, u8 bytes);
 
@@ -134,13 +138,28 @@ static int rsmu_i2c_write_device(struct rsmu_ddata *rsmu, u8 reg, u8 *buf, u8 by
 static int rsmu_write_page_register(struct rsmu_ddata *rsmu, u32 reg,
 				    rsmu_rw_device rsmu_write_device)
 {
-	u32 page = reg & RSMU_CM_PAGE_MASK;
+	u32 page;
+	u8 page_reg_off;
 	u8 buf[4];
 	int err;
 
-	/* Do not modify offset register for none-scsr registers */
-	if (reg < RSMU_CM_SCSR_BASE)
-		return 0;
+	switch (rsmu->type) {
+	case RSMU_CM:
+		/* Do not modify offset register for none-scsr registers */
+		if (reg < RSMU_CM_SCSR_BASE)
+			return 0;
+
+		page = reg & RSMU_CM_PAGE_MASK;
+		page_reg_off = RSMU_CM_PAGE_ADDR;
+		break;
+	case RSMU_FC3:
+		page = reg & RSMU_FC3_PAGE_MASK;
+		page_reg_off = RSMU_FC3_PAGE_ADDR;
+		break;
+	default:
+		dev_err(rsmu->dev, "Unsupported RSMU device type: %d\n", rsmu->type);
+		return -ENODEV;
+	}
 
 	/* Simply return if we are on the same page */
 	if (rsmu->page == page)
@@ -151,7 +170,7 @@ static int rsmu_write_page_register(struct rsmu_ddata *rsmu, u32 reg,
 	buf[2] = (u8)((page >> 16) & 0xFF);
 	buf[3] = (u8)((page >> 24) & 0xFF);
 
-	err = rsmu_write_device(rsmu, RSMU_CM_PAGE_ADDR, buf, sizeof(buf));
+	err = rsmu_write_device(rsmu, page_reg_off, buf, sizeof(buf));
 	if (err)
 		dev_err(rsmu->dev, "Failed to set page offset 0x%x\n", page);
 	else
@@ -164,8 +183,20 @@ static int rsmu_write_page_register(struct rsmu_ddata *rsmu, u32 reg,
 static int rsmu_i2c_reg_read(void *context, unsigned int reg, unsigned int *val)
 {
 	struct rsmu_ddata *rsmu = i2c_get_clientdata((struct i2c_client *)context);
-	u8 addr = (u8)(reg & RSMU_CM_ADDRESS_MASK);
+	u8 addr;
 	int err;
+
+	switch (rsmu->type) {
+	case RSMU_CM:
+		addr = (u8)(reg & RSMU_CM_ADDR_MASK);
+		break;
+	case RSMU_FC3:
+		addr = (u8)(reg & RSMU_FC3_ADDR_MASK);
+		break;
+	default:
+		dev_err(rsmu->dev, "Unsupported RSMU device type: %d\n", rsmu->type);
+		return -ENODEV;
+	}
 
 	err = rsmu_write_page_register(rsmu, reg, rsmu_i2c_write_device);
 	if (err)
@@ -181,9 +212,21 @@ static int rsmu_i2c_reg_read(void *context, unsigned int reg, unsigned int *val)
 static int rsmu_i2c_reg_write(void *context, unsigned int reg, unsigned int val)
 {
 	struct rsmu_ddata *rsmu = i2c_get_clientdata((struct i2c_client *)context);
-	u8 addr = (u8)(reg & RSMU_CM_ADDRESS_MASK);
+	u8 addr;
 	u8 data = (u8)val;
 	int err;
+
+	switch (rsmu->type) {
+	case RSMU_CM:
+		addr = (u8)(reg & RSMU_CM_ADDR_MASK);
+		break;
+	case RSMU_FC3:
+		addr = (u8)(reg & RSMU_FC3_ADDR_MASK);
+		break;
+	default:
+		dev_err(rsmu->dev, "Unsupported RSMU device type: %d\n", rsmu->type);
+		return -ENODEV;
+	}
 
 	err = rsmu_write_page_register(rsmu, reg, rsmu_i2c_write_device);
 	if (err)
@@ -200,8 +243,20 @@ static int rsmu_i2c_reg_write(void *context, unsigned int reg, unsigned int val)
 static int rsmu_smbus_i2c_reg_read(void *context, unsigned int reg, unsigned int *val)
 {
 	struct rsmu_ddata *rsmu = i2c_get_clientdata((struct i2c_client *)context);
-	u8 addr = (u8)(reg & RSMU_CM_ADDRESS_MASK);
+	u8 addr;
 	int err;
+
+	switch (rsmu->type) {
+	case RSMU_CM:
+		addr = (u8)(reg & RSMU_CM_ADDR_MASK);
+		break;
+	case RSMU_FC3:
+		addr = (u8)(reg & RSMU_FC3_ADDR_MASK);
+		break;
+	default:
+		dev_err(rsmu->dev, "Unsupported RSMU device type: %d\n", rsmu->type);
+		return -ENODEV;
+	}
 
 	err = rsmu_write_page_register(rsmu, reg, rsmu_smbus_i2c_write_device);
 	if (err)
@@ -217,9 +272,21 @@ static int rsmu_smbus_i2c_reg_read(void *context, unsigned int reg, unsigned int
 static int rsmu_smbus_i2c_reg_write(void *context, unsigned int reg, unsigned int val)
 {
 	struct rsmu_ddata *rsmu = i2c_get_clientdata((struct i2c_client *)context);
-	u8 addr = (u8)(reg & RSMU_CM_ADDRESS_MASK);
+	u8 addr;
 	u8 data = (u8)val;
 	int err;
+
+	switch (rsmu->type) {
+	case RSMU_CM:
+		addr = (u8)(reg & RSMU_CM_ADDR_MASK);
+		break;
+	case RSMU_FC3:
+		addr = (u8)(reg & RSMU_FC3_ADDR_MASK);
+		break;
+	default:
+		dev_err(rsmu->dev, "Unsupported RSMU device type: %d\n", rsmu->type);
+		return -ENODEV;
+	}
 
 	err = rsmu_write_page_register(rsmu, reg, rsmu_smbus_i2c_write_device);
 	if (err)
@@ -233,7 +300,7 @@ static int rsmu_smbus_i2c_reg_write(void *context, unsigned int reg, unsigned in
 	return err;
 }
 
-static const struct regmap_config rsmu_i2c_cm_regmap_config = {
+static const struct regmap_config rsmu_cm_regmap_config = {
 	.reg_bits = 32,
 	.val_bits = 8,
 	.max_register = 0x20120000,
@@ -242,7 +309,7 @@ static const struct regmap_config rsmu_i2c_cm_regmap_config = {
 	.cache_type = REGCACHE_NONE,
 };
 
-static const struct regmap_config rsmu_smbus_i2c_cm_regmap_config = {
+static const struct regmap_config rsmu_smbus_cm_regmap_config = {
 	.reg_bits = 32,
 	.val_bits = 8,
 	.max_register = 0x20120000,
@@ -271,6 +338,15 @@ static const struct regmap_config rsmu_sl_regmap_config = {
 	.can_multi_write = true,
 };
 
+static const struct regmap_config rsmu_fc3_regmap_config = {
+	.reg_bits = 32,
+	.val_bits = 8,
+	.max_register = 0xFFF,
+	.reg_read = rsmu_i2c_reg_read,
+	.reg_write = rsmu_i2c_reg_write,
+	.cache_type = REGCACHE_NONE,
+};
+
 static int rsmu_i2c_probe(struct i2c_client *client,
 			  const struct i2c_device_id *id)
 {
@@ -290,10 +366,10 @@ static int rsmu_i2c_probe(struct i2c_client *client,
 	switch (rsmu->type) {
 	case RSMU_CM:
 		if (i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-			cfg = &rsmu_i2c_cm_regmap_config;
+			cfg = &rsmu_cm_regmap_config;
 		} else if (i2c_check_functionality(client->adapter,
 						   I2C_FUNC_SMBUS_I2C_BLOCK)) {
-			cfg = &rsmu_smbus_i2c_cm_regmap_config;
+			cfg = &rsmu_smbus_cm_regmap_config;
 		} else {
 			dev_err(rsmu->dev, "Unsupported i2c adapter\n");
 			return -ENOTSUPP;
@@ -304,6 +380,9 @@ static int rsmu_i2c_probe(struct i2c_client *client,
 		break;
 	case RSMU_SL:
 		cfg = &rsmu_sl_regmap_config;
+		break;
+	case RSMU_FC3:
+		cfg = &rsmu_fc3_regmap_config;
 		break;
 	default:
 		dev_err(rsmu->dev, "Unsupported RSMU device type: %d\n", rsmu->type);
@@ -340,6 +419,8 @@ static const struct i2c_device_id rsmu_i2c_id[] = {
 	{ "82p33811", RSMU_SABRE },
 	{ "8v19n850", RSMU_SL },
 	{ "8v19n851", RSMU_SL },
+	{ "rc32312", RSMU_FC3 },
+	{ "rc32308", RSMU_FC3 },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, rsmu_i2c_id);
@@ -351,6 +432,8 @@ static const struct of_device_id rsmu_i2c_of_match[] = {
 	{ .compatible = "idt,82p33811", .data = (void *)RSMU_SABRE },
 	{ .compatible = "idt,8v19n850", .data = (void *)RSMU_SL },
 	{ .compatible = "idt,8v19n851", .data = (void *)RSMU_SL },
+	{ .compatible = "idt,rc32312", .data = (void *)RSMU_FC3 },
+	{ .compatible = "idt,rc32308", .data = (void *)RSMU_FC3 },
 	{}
 };
 MODULE_DEVICE_TABLE(of, rsmu_i2c_of_match);
