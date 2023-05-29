@@ -26,6 +26,13 @@
 
 static DEFINE_IDA(rsmu_cdev_map);
 
+/*
+ * The name of the firmware file to be loaded
+ * over-rides any automatic selection
+ */
+static char *firmware;
+module_param(firmware, charp, 0);
+
 static struct rsmu_ops *ops_array[] = {
 	[0] = &cm_ops,
 	[1] = &sabre_ops,
@@ -285,6 +292,10 @@ rsmu_probe(struct platform_device *pdev)
 			ida_simple_remove(&rsmu_cdev_map, rsmu->index);
 			return err;			
 		}
+	}
+
+	if (rsmu->ops->load_firmware) {
+		(void)rsmu->ops->load_firmware(rsmu, firmware);
 	}
 
 	/* Initialize and register the miscdev */

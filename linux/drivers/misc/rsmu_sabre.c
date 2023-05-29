@@ -15,7 +15,16 @@
 
 #include "rsmu_cdev.h"
 
+#define FW_FILENAME	"rsmu82p33xxx.bin"
+
 static u8 dpll_operating_mode_cnfg_prev[2] = {0xff, 0xff};
+
+static int check_and_set_masks(struct idt82p33 *idt82p33, u8 page, u8 offset, u8 val)
+{
+	int err = 0;
+
+	return err;
+}
 
 static int reg_readwrite(struct rsmu_cdev *rsmu, u16 offset, u8 *val8, u8 write)
 {
@@ -272,6 +281,66 @@ static int rsmu_sabre_set_holdover_mode(struct rsmu_cdev *rsmu, u8 dpll, u8 enab
 	return err;
 }
 
+static int rsmu_sabre_load_firmware(struct rsmu_cdev *rsmu,
+				    char fwname[FW_NAME_LEN_MAX])
+{
+	char fname[128] = FW_FILENAME;
+	const struct firmware *fw;
+	struct idt82p33_fwrc *rec;
+	u8 loaddr, page, val;
+	int err;
+	s32 len;
+
+	if (fwname) /* module parameter */
+		snprintf(fname, sizeof(fname), "%s", fwname);
+
+	dev_info(rsmu->dev, "requesting firmware '%s'\n", fname);
+
+	err = request_firmware(&fw, fname, rsmu->dev);
+
+	if (err) {
+		dev_err(rsmu->dev,
+			"Failed in %s with err %d!\n", __func__, err);
+		return err;
+	}
+
+	dev_dbg(rsmu->dev, "firmware size %zu bytes\n", fw->size);
+
+	rec = (struct idt82p33_fwrc *) fw->data;
+
+	for (len = fw->size; len > 0; len -= sizeof(*rec)) {
+
+		if (rec->reserved) {
+			dev_err(rsmu->dev,
+				"bad firmware, reserved field non-zero\n");
+			err = -EINVAL;
+		} else {
+			val = rec->value;
+			loaddr = rec->loaddr;
+			page = rec->hiaddr;
+
+			rec++;
+
+			err = check_and_set_masks(rsmu, page, loaddr, val);
+		}
+
+		if (err == 0) {
+			/* Page size 128, last 4 bytes of page skipped */
+			if (loaddr > 0x7b)
+				continue;
+			err = regmap_bulk_write(rsmu->regmap, REG_ADDR(page, loaddr),
+						&val, sizeof(val));
+		}
+
+		if (err)
+			goto out;
+	}
+
+out:
+	release_firmware(fw);
+	return err;	
+}
+
 struct rsmu_ops sabre_ops = {
 	.type = RSMU_SABRE,
 	.set_combomode = rsmu_sabre_set_combomode,
@@ -279,4 +348,5 @@ struct rsmu_ops sabre_ops = {
 	.get_dpll_ffo = rsmu_sabre_get_dpll_ffo,
 	.set_holdover_mode = rsmu_sabre_set_holdover_mode,
 	.get_fw_version = NULL,
+	.load_firmware = rsmu_sabre_load_firmware,
 };
