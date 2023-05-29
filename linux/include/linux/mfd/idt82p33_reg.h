@@ -117,4 +117,31 @@ enum dpll_state {
 	DPLL_STATE_MAX = DPLL_STATE_LOSTPHASE,
 };
 
+/* firmware interface */
+struct idt82p33_fwrc {
+	u8 hiaddr;
+	u8 loaddr;
+	u8 value;
+	u8 reserved;
+} __packed;
+
+#define PLLMASK_ADDR_HI	0xFF
+#define PLLMASK_ADDR_LO	0xA5
+
+#define PLL0_OUTMASK_ADDR_HI	0xFF
+#define PLL0_OUTMASK_ADDR_LO	0xB0
+
+#define PLL1_OUTMASK_ADDR_HI	0xFF
+#define PLL1_OUTMASK_ADDR_LO	0xB2
+
+#define PLL2_OUTMASK_ADDR_HI	0xFF
+#define PLL2_OUTMASK_ADDR_LO	0xB4
+
+#define PLL3_OUTMASK_ADDR_HI	0xFF
+#define PLL3_OUTMASK_ADDR_LO	0xB6
+
+#define DEFAULT_PLL_MASK	(0x01)
+#define DEFAULT_OUTPUT_MASK_PLL0	(0xc0)
+#define DEFAULT_OUTPUT_MASK_PLL1	DEFAULT_OUTPUT_MASK_PLL0
+
 #endif

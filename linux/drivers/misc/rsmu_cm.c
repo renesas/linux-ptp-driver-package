@@ -15,6 +15,17 @@
 
 #include "rsmu_cdev.h"
 
+#define FW_FILENAME	"rsmu8A34xxx.bin"
+
+static int check_and_set_masks(struct rsmu_cdev *rsmu,
+			       u16 regaddr,
+			       u8 val)
+{
+	int err = 0;
+
+	return err;
+}
+
 static int rsmu_cm_set_combomode(struct rsmu_cdev *rsmu, u8 dpll, u8 mode)
 {
 	u32 dpll_ctrl_n;
@@ -299,6 +310,75 @@ static int rsmu_cm_get_fw_version(struct rsmu_cdev *rsmu)
 	return 0;
 }
 
+static int rsmu_cm_load_firmware(struct rsmu_cdev *rsmu,
+				 char fwname[FW_NAME_LEN_MAX])
+{
+	u16 scratch = IDTCM_FW_REG(rsmu->fw_version, V520, SCRATCH);
+	char fname[FW_NAME_LEN_MAX] = FW_FILENAME;
+	const struct firmware *fw;
+	struct idtcm_fwrc *rec;
+	u32 regaddr;
+	int err;
+	s32 len;
+	u8 val;
+	u8 loaddr;
+
+	if (fwname) /* module parameter */
+		snprintf(fname, sizeof(fname), "%s", fwname);
+
+	dev_info(rsmu->dev, "requesting firmware '%s'", fname);
+
+	err = request_firmware(&fw, fname, rsmu->dev);
+	if (err) {
+		dev_err(rsmu->dev, "Loading firmware %s failed !!!", fname);
+		return err;
+	}
+
+	dev_dbg(rsmu->dev, "firmware size %zu bytes", fw->size);
+
+	rec = (struct idtcm_fwrc *) fw->data;
+
+	for (len = fw->size; len > 0; len -= sizeof(*rec)) {
+		if (rec->reserved) {
+			dev_err(rsmu->dev,
+				"bad firmware, reserved field non-zero");
+			err = -EINVAL;
+		} else {
+			regaddr = rec->hiaddr << 8;
+			regaddr |= rec->loaddr;
+
+			val = rec->value;
+			loaddr = rec->loaddr;
+
+			rec++;
+
+			err = check_and_set_masks(rsmu, regaddr, val);
+		}
+
+		if (err != -EINVAL) {
+			err = 0;
+
+			/* Top (status registers) and bottom are read-only */
+			if (regaddr < SCSR_ADDR(GPIO_USER_CONTROL) || regaddr >= scratch)
+				continue;
+
+			/* Page size 128, last 4 bytes of page skipped */
+			if ((loaddr > 0x7b && loaddr <= 0x7f) || loaddr > 0xfb)
+				continue;
+
+			err = regmap_bulk_write(rsmu->regmap, SCSR_BASE + regaddr,
+					       &val, sizeof(val));
+		}
+
+		if (err)
+			goto out;
+	}
+
+out:
+	release_firmware(fw);
+	return err;	
+}
+
 struct rsmu_ops cm_ops = {
 	.type = RSMU_CM,
 	.set_combomode = rsmu_cm_set_combomode,
@@ -307,4 +387,5 @@ struct rsmu_ops cm_ops = {
 	.set_holdover_mode = rsmu_cm_set_holdover_mode,
 	.set_output_tdc_go = rsmu_cm_set_output_tdc_go,
 	.get_fw_version = rsmu_cm_get_fw_version,
+	.load_firmware = rsmu_cm_load_firmware,
 };

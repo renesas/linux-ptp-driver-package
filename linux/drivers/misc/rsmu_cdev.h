@@ -8,10 +8,13 @@
 #ifndef __LINUX_RSMU_CDEV_H
 #define __LINUX_RSMU_CDEV_H
 
+#include <linux/firmware.h>
 #include <linux/miscdevice.h>
 #include <linux/regmap.h>
 
 struct rsmu_ops;
+
+#define FW_NAME_LEN_MAX	256
 
 /**
  * Define function to set bitfield value of read data from device
@@ -88,6 +91,7 @@ struct rsmu_ops {
 				 u8 enable, u8 mode);
 	int (*set_output_tdc_go)(struct rsmu_cdev *rsmu, u8 tdc,
 				 u8 enable);
+	int (*load_firmware)(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX]);
 };
 
 /**
