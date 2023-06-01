@@ -19,7 +19,7 @@
 
 static u8 dpll_operating_mode_cnfg_prev[2] = {0xff, 0xff};
 
-static int check_and_set_masks(struct idt82p33 *idt82p33, u8 page, u8 offset, u8 val)
+static int check_and_set_masks(struct rsmu_cdev *rsmu, u8 page, u8 offset, u8 val)
 {
 	int err = 0;
 
