@@ -80,6 +80,7 @@ struct rsmu_cdev {
 
 extern struct rsmu_ops cm_ops;
 extern struct rsmu_ops sabre_ops;
+extern struct rsmu_ops fc3_ops;
 
 struct rsmu_ops {
 	enum rsmu_type type;

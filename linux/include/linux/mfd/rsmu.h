@@ -8,15 +8,14 @@
 #ifndef __LINUX_MFD_RSMU_H
 #define __LINUX_MFD_RSMU_H
 
-#define RSMU_MAX_WRITE_COUNT		(255)
-#define RSMU_MAX_READ_COUNT		(255)
+#define RSMU_MAX_WRITE_COUNT	(255)
+#define RSMU_MAX_READ_COUNT	(255)
 
-/* The supported devices are ClockMatrix, Sabre, SnowLotus, and FemtoClock3 */
+/* The supported devices are ClockMatrix, Sabre and FemtoClock3 */
 enum rsmu_type {
-	RSMU_CM		= 0x34000, /* ClockMatrix */
-	RSMU_SABRE	= 0x33810, /* Sabre */
-	RSMU_SL		= 0x19850, /* SnowLotus */
-	RSMU_FC3	= 0x32300, /* FemtoClock3 */
+	RSMU_CM		= 0x34000,
+	RSMU_SABRE	= 0x33810,
+	RSMU_FC3	= 0x38312,
 };
 
 /**
