@@ -35,6 +35,7 @@ module_param(firmware, charp, 0);
 static struct rsmu_ops *ops_array[] = {
 	[0] = &cm_ops,
 	[1] = &sabre_ops,
+	[2] = &fc3_ops,
 };
 
 static int
@@ -403,8 +404,9 @@ rsmu_remove(struct platform_device *pdev)
 }
 
 static const struct platform_device_id rsmu_id_table[] = {
-	{ "8a3400x-cdev", RSMU_CM },
-	{ "82p33x1x-cdev", RSMU_SABRE },
+	{ "8a3400x-cdev", RSMU_CM},
+	{ "82p33x1x-cdev", RSMU_SABRE},
+	{ "rc38xxx-cdev", RSMU_FC3},
 	{}
 };
 MODULE_DEVICE_TABLE(platform, rsmu_id_table);
