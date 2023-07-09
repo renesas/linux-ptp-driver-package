@@ -45,6 +45,54 @@
 
 #define NSEC2SEC 1000000000.0
 
+#define BASE_DECIMAL     0
+#define BASE_HEXADECIMAL 16
+
+#define MIN_DPLL_IDX 0
+#define MAX_DPLL_IDX 7
+
+#define MIN_CLOCK_INDEX 0
+#define MAX_CLOCK_INDEX 15
+
+#define MIN_OFFSET 0
+#define MAX_OFFSET 0x20120000
+
+#define MIN_COUNT 1
+#define MAX_COUNT 255
+
+#define MIN_NUMBER_ENTRIES 0
+#define MAX_NUMBER_ENTRIES 19
+
+#define MIN_PRIORITY 0
+#define MAX_PRIORITY 18
+
+#define MIN_MODE 0
+#define MAX_MODE 3
+
+#define MIN_ENABLE 0
+#define MAX_ENABLE 1
+
+#define MIN_TDC 0
+#define MAX_TDC 3
+
+#define MIN_WRITE_VAL 0
+#define MAX_WRITE_VAL 255
+
+#define MIN_TIME 0.0
+#define MAX_TIME DBL_MAX
+
+typedef int (*cmd_func_t)(int, int, char *[]);
+
+struct cmd_t {
+	const char *name;
+	const cmd_func_t function;
+};
+
+static cmd_func_t get_command_function(const char *name);
+static inline int name_is_a_command(const char *name);
+
+/* Helper functions */
+
 /* trap the alarm signal so that pause() will wake up on receipt */
 static void handle_alarm(int s)
 {
@@ -103,10 +151,14 @@ static void usage(const char *progname)
 		" commands\n"
 		" specify commands with arguments. Can specify multiple\n"
 		" commands to be executed in order.\n"
-		"  get_ffo   <dpll_n>                              get <dpll_n> FFO in ppb\n"
-		"  get_state <dpll_n>                              get state of <dpll_n>\n"
-		"  rd        <offset (hex)> [count]                read [count] bytes from offset (default count 1)\n"
-		"  set_combo_mode  <dpll_n> <mode>                 set combo mode\n"
+		"   get_current_clock_index <dpll_n>                get current clock index of <dpll_n>\n"
+		"   get_ffo <dpll_n>                                get <dpll_n> FFO in ppb\n"
+		"   get_reference_monitor_status <clock_n>          get reference monitor status of <clock_n>\n"
+		"   get_state <dpll_n>                              get state of <dpll_n>\n"
+		"   rd <offset (hex)> [count]                       read [count] bytes from offset (by default [count] is 1)\n"
+		"   set_clock_priorities <dpll_n> <num_entries>     set [clock_n] [priority_n] for <num_entries> of <dpll_n>\n"
+		"                        [clock_n] [priority_n]\n"
+		"   set_combo_mode <dpll_n> <mode>                  set combo mode\n"
 		"                                                    CM\n"
 		"                                                      0   Hold Disabled\n"
 		"                                                      1-3 Hold Enabled\n"
@@ -115,53 +167,371 @@ static void usage(const char *progname)
 		"                                                      1   FREQ_OFFSET\n"
 		"                                                      2   FAST_AVG_FREQ_OFFSET\n"
 		"                                                      3   PLL_COMBO_MODE_HOLD\n"
-		"  set_holdover_mode <dpll_n> <enable> <mode>      set holdover mode\n"
-		"  set_output_tdc_go <tdc_n> <enable>              set output TDC go bit\n"
-		"  wait      <seconds>                             pause <seconds> between commands\n"
-		"  wr        <offset (hex)> <count> <val (hex)>    write <val> to <offset>\n"
+		"  set_holdover_mode <dpll_n> <enable> <mode>        set holdover mode\n"
+		"  set_output_tdc_go <tdc_n> <enable>                set output TDC go bit\n"
+		"  wait <seconds>                                    pause <seconds> between commands\n"
+		"  wr <offset (hex)> <count> <val (hex)>             write [count] bytes with <val> to <offset>\n"
 		"\n",
 		progname);
 }
 
-typedef int (*cmd_func_t)(int, int, char *[]);
-struct cmd_t {
-	const char *name;
-	const cmd_func_t function;
-};
+/* Argument handler functions */
 
-static cmd_func_t get_command_function(const char *name);
-static inline int name_is_a_command(const char *name);
-
-static int do_get_ffo(int cdevFd, int cmdc, char *cmdv[])
+static int handle_dpll_arg(const char *func_name, char *dpll_arg, unsigned char *dpll)
 {
-	struct rsmu_get_ffo get = {0};
 	enum parser_result r;
+	unsigned int tmp;
 
-	if (cmdc < 1 || name_is_a_command(cmdv[0])) {
-		pr_err("get_ffo: missing required DPLL index argument");
-		return -2;
-	}
+	r = get_ranged_uint(dpll_arg, &tmp, MIN_DPLL_IDX, MAX_DPLL_IDX, BASE_DECIMAL);
 
-	r = get_ranged_uint(cmdv[0], (unsigned int *)&get.dpll, 0, 7, 0);
 	switch (r) {
 	case PARSED_OK:
 		break;
 	case MALFORMED:
-		pr_err("%s: dpll '%s' is not a valid uint", __func__, cmdv[0]);
+		pr_err("%s: dpll '%s' is not a valid uint", func_name, dpll_arg);
 		return -2;
 	case OUT_OF_RANGE:
-		pr_err("%s: dpll '%s' is out of range.", __func__, cmdv[0]);
+		pr_err("%s: dpll '%s' is out of range.", func_name, dpll_arg);
 		return -2;
 	default:
-		pr_err("%s: couldn't process dpll '%s'", __func__, cmdv[0]);
+		pr_err("%s: couldn't process dpll '%s'", func_name, dpll_arg);
+		return -2;
 	}
 
-	if (ioctl(cdevFd, RSMU_GET_FFO, &get)) {
-		pr_err("%s: failed - is dpll%d valid for this part?", __func__, get.dpll);
+	*dpll = (unsigned char)tmp;
+
+	return 0;
+}
+
+static int handle_clock_index_arg(const char *func_name, char *clock_index_arg, unsigned char *clock_index)
+{
+	enum parser_result r;
+	unsigned int tmp;
+
+	r = get_ranged_uint(clock_index_arg, &tmp, MIN_CLOCK_INDEX, MAX_CLOCK_INDEX, BASE_DECIMAL);
+
+	switch (r) {
+	case PARSED_OK:
+		break;
+	case MALFORMED:
+		pr_err("%s: clock index '%s' is not a valid uint", func_name, clock_index_arg);
+		return -2;
+	case OUT_OF_RANGE:
+		pr_err("%s: clock index '%s' is out of range.", func_name, clock_index_arg);
+		return -2;
+	default:
+		pr_err("%s: couldn't process clock index '%s'", func_name, clock_index_arg);
+		return -2;
+	}
+
+	*clock_index = (unsigned char)tmp;
+
+	return 0;
+}
+
+static int handle_offset_arg(const char *func_name, char *offset_arg, unsigned int *offset)
+{
+	enum parser_result r;
+
+	r = get_ranged_uint(offset_arg, (unsigned int *)offset, MIN_OFFSET, MAX_OFFSET, BASE_HEXADECIMAL);
+
+	switch (r) {
+	case PARSED_OK:
+		break;
+	case MALFORMED:
+		pr_err("%s: offset '%s' is not a valid uint", func_name, offset_arg);
+		return -2;
+	case OUT_OF_RANGE:
+		pr_err("%s: offset '%s' is out of range.", func_name, offset_arg);
+		return -2;
+	default:
+		pr_err("%s: couldn't process offset '%s'", func_name, offset_arg);
+		return -2;
+	}
+
+	return 0;
+}
+
+static int handle_count_arg(const char *func_name, char *count_arg, unsigned char *count)
+{
+	enum parser_result r;
+	unsigned int tmp;
+
+	r = get_ranged_uint(count_arg, &tmp, MIN_COUNT, MAX_COUNT, BASE_DECIMAL);
+
+	switch (r) {
+	case PARSED_OK:
+		break;
+	case MALFORMED:
+		pr_err("%s: count '%s' is not a valid uint", func_name, count_arg);
+		return -2;
+	case OUT_OF_RANGE:
+		pr_err("%s: count '%s' is out of range.", func_name, count_arg);
+		return -2;
+	default:
+		pr_err("%s: couldn't process count '%s'", func_name, count_arg);
+		return -2;
+	}
+
+	*count = (unsigned char)tmp;
+
+	return 0;
+}
+
+static int handle_num_entries_arg(const char *func_name, char *num_entries_arg, unsigned char *num_entries)
+{
+	enum parser_result r;
+	unsigned int tmp;
+
+	r = get_ranged_uint(num_entries_arg, &tmp, MIN_NUMBER_ENTRIES, MAX_NUMBER_ENTRIES, BASE_DECIMAL);
+
+	switch (r) {
+	case PARSED_OK:
+		break;
+	case MALFORMED:
+		pr_err("%s: number of entries '%s' is not a valid uint", func_name, num_entries_arg);
+		return -2;
+	case OUT_OF_RANGE:
+		pr_err("%s: number of entries '%s' is out of range.", func_name, num_entries_arg);
+		return -2;
+	default:
+		pr_err("%s: couldn't process number of entries '%s'", func_name, num_entries_arg);
+		return -2;
+	}
+
+	*num_entries = (unsigned char)tmp;
+
+	return 0;
+}
+
+static int handle_pri_arg(const char *func_name, char *pri_arg, unsigned char *pri)
+{
+	enum parser_result r;
+	unsigned int tmp;
+
+	r = get_ranged_uint(pri_arg, &tmp, MIN_PRIORITY, MAX_PRIORITY, BASE_DECIMAL);
+
+	switch (r) {
+	case PARSED_OK:
+		break;
+	case MALFORMED:
+		pr_err("%s: priority '%s' is not a valid uint", func_name, pri_arg);
+		return -2;
+	case OUT_OF_RANGE:
+		pr_err("%s: priority '%s' is out of range.", func_name, pri_arg);
+		return -2;
+	default:
+		pr_err("%s: couldn't process priority '%s'", func_name, pri_arg);
+		return -2;
+	}
+
+	*pri = (unsigned char)tmp;
+
+	return 0;
+}
+
+static int handle_mode_arg(const char *func_name, char *mode_arg, unsigned char *mode)
+{
+	enum parser_result r;
+	unsigned int tmp;
+
+	r = get_ranged_uint(mode_arg, &tmp, MIN_MODE, MAX_MODE, BASE_DECIMAL);
+
+	switch (r) {
+	case PARSED_OK:
+		break;
+	case MALFORMED:
+		pr_err("%s: mode '%s' is not a valid uint", func_name, mode_arg);
+		return -2;
+	case OUT_OF_RANGE:
+		pr_err("%s: mode '%s' is out of range.", func_name, mode_arg);
+		return -2;
+	default:
+		pr_err("%s: couldn't process mode '%s'", func_name, mode_arg);
+		return -2;
+	}
+
+	*mode = (unsigned char)tmp;
+
+	return 0;
+}
+
+static int handle_enable_arg(const char *func_name, char *enable_arg, unsigned char *enable)
+{
+	enum parser_result r;
+	unsigned int tmp;
+
+	r = get_ranged_uint(enable_arg, &tmp, MIN_ENABLE, MAX_ENABLE, BASE_DECIMAL);
+
+	switch (r) {
+	case PARSED_OK:
+		break;
+	case MALFORMED:
+		pr_err("%s: enable '%s' is not a valid uint", func_name, enable_arg);
+		return -2;
+	case OUT_OF_RANGE:
+		pr_err("%s: enable '%s' is out of range.", func_name, enable_arg);
+		return -2;
+	default:
+		pr_err("%s: couldn't process enable '%s'", func_name, enable_arg);
+		return -2;
+	}
+
+	*enable = (unsigned char)tmp;
+
+	return 0;
+}
+
+static int handle_tdc_arg(const char *func_name, char *tdc_arg, unsigned char *tdc)
+{
+	enum parser_result r;
+	unsigned int tmp;
+
+	r = get_ranged_uint(tdc_arg, &tmp, MIN_TDC, MAX_TDC, BASE_DECIMAL);
+
+	switch (r) {
+	case PARSED_OK:
+		break;
+	case MALFORMED:
+		pr_err("%s: tdc '%s' is not a valid uint", func_name, tdc_arg);
+		return -2;
+	case OUT_OF_RANGE:
+		pr_err("%s: tdc '%s' is out of range.", func_name, tdc_arg);
+		return -2;
+	default:
+		pr_err("%s: couldn't process tdc '%s'", func_name, tdc_arg);
+		return -2;
+	}
+
+	*tdc = (unsigned char)tmp;
+
+	return 0;
+}
+
+static int handle_write_val_arg(const char *func_name, char *write_val_arg, unsigned char *write_val)
+{
+	enum parser_result r;
+	unsigned int tmp;
+
+	r = get_ranged_uint(write_val_arg, &tmp, MIN_WRITE_VAL, MAX_WRITE_VAL, BASE_HEXADECIMAL);
+
+	switch (r) {
+	case PARSED_OK:
+		break;
+	case MALFORMED:
+		pr_err("%s: write value '%s' is not a valid uint", func_name, write_val_arg);
+		return -2;
+	case OUT_OF_RANGE:
+		pr_err("%s: write value '%s' is out of range.", func_name, write_val_arg);
+		return -2;
+	default:
+		pr_err("%s: couldn't process write value '%s'", func_name, write_val_arg);
+		return -2;
+	}
+
+	*write_val = (unsigned char)tmp;
+
+	return 0;
+}
+
+static int handle_time_arg(const char *func_name, char *time_arg, double *time)
+{
+	enum parser_result r;
+
+	r = get_ranged_double(time_arg, time, MIN_TIME, MAX_TIME);
+
+	switch (r) {
+	case PARSED_OK:
+		break;
+	case MALFORMED:
+		pr_err("%s: time '%s' is not a valid uint", func_name, time_arg);
+		return -2;
+	case OUT_OF_RANGE:
+		pr_err("%s: time '%s' is out of range.", func_name, time_arg);
+		return -2;
+	default:
+		pr_err("%s: couldn't process time '%s'", func_name, time_arg);
+		return -2;
+	}
+
+	return 0;
+}
+
+/* Command functions */
+
+static int do_get_current_clock_index(int cdevFd, int cmdc, char *cmdv[])
+{
+	struct rsmu_current_clock_index get = {0};
+	int err;
+
+	if (cmdc < 1 || name_is_a_command(cmdv[0])) {
+		pr_err("%s: missing required dpll argument", __func__);
+		return -2;
+	}
+
+	err = handle_dpll_arg(__func__, cmdv[0], &get.dpll);
+	if (err) {
+		return err;
+	}
+
+	if (ioctl(cdevFd, RSMU_GET_CURRENT_CLOCK_INDEX, &get)) {
+		pr_err("%s: failed - is dpll %u valid for this part?", __func__, get.dpll);
 		return -1;
 	}
 
-	printf("DPLL %d:  ffo =  %.6f ppb\n", get.dpll, get.ffo * 1e-9);
+	printf("dpll %u: clock index = %d\n", get.dpll, get.clock_index);
+
+	return 1;
+}
+
+static int do_get_ffo(int cdevFd, int cmdc, char *cmdv[])
+{
+	struct rsmu_get_ffo get = {0};
+	int err;
+
+	if (cmdc < 1 || name_is_a_command(cmdv[0])) {
+		pr_err("%s: missing required dpll argument", __func__);
+		return -2;
+	}
+
+	err = handle_dpll_arg(__func__, cmdv[0], &get.dpll);
+	if (err) {
+		return err;
+	}
+
+	if (ioctl(cdevFd, RSMU_GET_FFO, &get)) {
+		pr_err("%s: failed - is dpll %u valid for this part?", __func__, get.dpll);
+		return -1;
+	}
+
+	printf("dpll %u: ffo = %.6f ppb\n", get.dpll, get.ffo * 1e-9);
+
+	return 1;
+}
+
+static int do_get_reference_monitor_status(int cdevFd, int cmdc, char *cmdv[])
+{
+	struct rsmu_reference_monitor_status get = {0};
+	int err;
+
+
+	if (cmdc < 1 || name_is_a_command(cmdv[0])) {
+		pr_err("%s: missing required clock index argument", __func__);
+		return -2;
+	}
+
+	err = handle_clock_index_arg(__func__, cmdv[0], &get.clock_index);
+	if (err) {
+		return err;
+	}
+
+	if (ioctl(cdevFd, RSMU_GET_REFERENCE_MONITOR_STATUS, &get)) {
+		pr_err("%s: failed - is clock index %u valid for this part?", __func__, get.clock_index);
+		return -1;
+	}
+
+	printf("clock index %u: reference monitor status: los = %u no act = %u ffo limit = %u\n",
+	       get.clock_index, get.alarms.los, get.alarms.no_activity, get.alarms.frequency_offset_limit);
 
 	return 1;
 }
@@ -169,34 +539,24 @@ static int do_get_ffo(int cdevFd, int cmdc, char *cmdv[])
 static int do_get_state(int cdevFd, int cmdc, char *cmdv[])
 {
 	struct rsmu_get_state get = {0};
-	enum parser_result r;
+	int err;
 
 	if (cmdc < 1 || name_is_a_command(cmdv[0])) {
-		pr_err("get_state: missing required DPLL index argument");
+		pr_err("%s: missing required dpll index argument", __func__);
 		return -2;
 	}
 
-	r = get_ranged_uint(cmdv[0], (unsigned int *)&get.dpll, 0, 7, 0);
-	switch (r) {
-	case PARSED_OK:
-		break;
-	case MALFORMED:
-		pr_err("%s: dpll '%s' is not a valid uint", __func__, cmdv[0]);
-		return -2;
-	case OUT_OF_RANGE:
-		pr_err("%s: dpll '%s' is out of range.", __func__, cmdv[0]);
-		return -2;
-	default:
-		pr_err("%s: couldn't process dpll '%s'", __func__, cmdv[0]);
-		return -2;
+	err = handle_dpll_arg(__func__, cmdv[0], &get.dpll);
+	if (err) {
+		return err;
 	}
 
 	if (ioctl(cdevFd, RSMU_GET_STATE, &get)) {
-		pr_err("%s: failed - is dpll%d valid for this part?", __func__, get.dpll);
+		pr_err("%s: failed - is dpll %u valid for this part?", __func__, get.dpll);
 		return -1;
 	}
 
-	printf("DPLL %d:  state = %d\n", get.dpll, get.state);
+	printf("dpll %u: state = %u\n", get.dpll, get.state);
 
 	return 1;
 }
@@ -206,58 +566,36 @@ static int do_rd(int cdevFd, int cmdc, char *cmdv[])
 	unsigned int aligned_offset = 0;
 	unsigned int count_offset = 0;
 	struct rsmu_reg_rw get = {0};
-	unsigned int count = 1;
-	int args_consumed = 1;
+	unsigned char count = 1;
+	int args_consumed = 0;
 	unsigned int offset;
-	enum parser_result r;
 	int i;
+	int err;
 
 	if (cmdc < 1 || name_is_a_command(cmdv[0])) {
-		pr_err("rd: missing required offset argument");
+		pr_err("%s: missing required offset argument", __func__);
 		return -2;
 	}
 
 	/* Extend to access page registers and SYS RAM3 */
-	r = get_ranged_uint(cmdv[0], &offset, 0, 0x20120000, 16);
+	err = handle_offset_arg(__func__, cmdv[0], &offset);
+	if (err) {
+		return err;
+	}
+	args_consumed++;
 	get.offset = offset;
 
-	switch (r) {
-	case PARSED_OK:
-		break;
-	case MALFORMED:
-		pr_err("rd: offset '%s' is not a valid uint", cmdv[0]);
-		return -2;
-	case OUT_OF_RANGE:
-		pr_err("rd: offset '%s' is out of range.", cmdv[0]);
-		return -2;
-	default:
-		pr_err("rd: couldn't process '%s' for offset", cmdv[0]);
-		return -2;
-	}
-
 	if (cmdc > 1 && !name_is_a_command(cmdv[1])) {
-		r = get_ranged_uint(cmdv[1], &count, 1, 256, 0);
-		switch (r) {
-		case PARSED_OK:
-			break;
-		case MALFORMED:
-			pr_err("rd: count '%s' is not a valid uint", cmdv[1]);
-			return -2;
-		case OUT_OF_RANGE:
-			pr_err("rd: count '%s' is out of range.", cmdv[1]);
-			return -2;
-		default:
-			pr_err("rd: couldn't process '%s' for count", cmdv[1]);
-			return -2;
+		err = handle_count_arg(__func__, cmdv[1], &count);
+		if (err) {
+			return err;
 		}
 		args_consumed++;
 	}
-
 	get.byte_count = count;
 
 	if (ioctl(cdevFd, RSMU_REG_READ, &get)) {
-		pr_err("%s: failed", __func__);
-		perror("RSMU_REG_READ failed");
+		pr_err("%s: RSMU_REG_READ failed", __func__);
 		return -1;
 	}
 
@@ -269,7 +607,7 @@ static int do_rd(int cdevFd, int cmdc, char *cmdv[])
 
 		for (i = 0; i < count + count_offset; i++) {
 			if (0 == (i % 16)) {
-				printf("\n%04x: ", offset + i);
+				printf("\n%04x: ", aligned_offset);
 			}
 
 			if (aligned_offset < (offset & 0xffff)) {
@@ -281,216 +619,196 @@ static int do_rd(int cdevFd, int cmdc, char *cmdv[])
 		}
 		printf("\n");
 	}
+
+	return args_consumed;
+}
+
+static int do_set_clock_priorities(int cdevFd, int cmdc, char *cmdv[])
+{
+	struct rsmu_clock_priorities set = {0};
+	int args_consumed = 0;
+	int err;
+	int i;
+
+	if (cmdc < 4 || name_is_a_command(cmdv[0])) {
+		pr_err("%s: missing required dpll, number of entries, clock index, and/or priority entry arguments", __func__);
+		return -2;
+	}
+
+	err = handle_dpll_arg(__func__, cmdv[0], &set.dpll);
+	if (err) {
+		return err;
+	}
+	args_consumed++;
+
+	if (!name_is_a_command(cmdv[1])) {
+		err = handle_num_entries_arg(__func__, cmdv[1], &set.num_entries);
+		if (err) {
+			return err;
+		}
+
+		if (set.num_entries != ((cmdc - 2) / 2)) {
+			pr_err("%s: insufficient arguments", __func__);
+			return -2;
+		}
+	}
+	args_consumed++;
+
+	i = 0;
+	while (args_consumed < cmdc) {
+		if (!name_is_a_command(cmdv[args_consumed])) {
+			if (args_consumed & 1) {
+				printf("pri = %s\n", cmdv[args_consumed]);
+				err = handle_pri_arg(__func__, cmdv[args_consumed], &set.priority_entry[i].priority);
+				i++;
+			} else {
+				printf("clk = %s\n", cmdv[args_consumed]);
+				err = handle_clock_index_arg(__func__, cmdv[args_consumed], &set.priority_entry[i].clock_index);
+			}
+
+			if (err) {
+				return err;
+			}
+			args_consumed++;
+		}
+	}
+
+	if (ioctl(cdevFd, RSMU_SET_CLOCK_PRIORITIES, &set)) {
+		pr_err("%s: failed - is dpll %u valid for this part?", __func__, set.dpll);
+		return -1;
+	}
+
+	printf("dpll %u: number of entries = %u\n", set.dpll, set.num_entries);
+
 	return args_consumed;
 }
 
 static int do_set_combo_mode(int cdevFd, int cmdc, char *cmdv[])
 {
 	struct rsmu_combomode set = {0};
-	int args_consumed = 1;
-	enum parser_result r;
+	int args_consumed = 0;
+	int err;
 
 	if (cmdc < 2 || name_is_a_command(cmdv[0])) {
-		pr_err("%s: missing required dpll and mode argument", __func__);
+		pr_err("%s: missing required dpll and mode arguments", __func__);
 		return -2;
 	}
 
-	r = get_ranged_uint(cmdv[0], (unsigned int *)&set.dpll, 0, 7, 0);
-	switch (r) {
-	case PARSED_OK:
-		break;
-	case MALFORMED:
-		pr_err("%s: dpll '%s' is not a valid uint", __func__, cmdv[0]);
-		return -2;
-	case OUT_OF_RANGE:
-		pr_err("%s: dpll '%s' is out of range.", __func__, cmdv[0]);
-		return -2;
-	default:
-		pr_err("%s: couldn't process dpll '%s'", __func__, cmdv[0]);
-		return -2;
+	err = handle_dpll_arg(__func__, cmdv[0], &set.dpll);
+	if (err) {
+		return err;
 	}
+	args_consumed++;
 
-	if (cmdc > 1 && !name_is_a_command(cmdv[1])) {
-		r = get_ranged_uint(cmdv[1], (unsigned int *)&set.mode, 0, 3, 0);
-		switch (r) {
-		case PARSED_OK:
-			break;
-		case MALFORMED:
-			pr_err("%s: mode '%s' is not a valid uint", __func__, cmdv[1]);
-			return -2;
-		case OUT_OF_RANGE:
-			pr_err("%s: mode '%s' is out of range.", __func__, cmdv[1]);
-			return -2;
-		default:
-			pr_err("%s: couldn't process '%s' for count", __func__, cmdv[1]);
-			return -2;
+	if (!name_is_a_command(cmdv[1])) {
+		err = handle_mode_arg(__func__, cmdv[1], &set.mode);
+		if (err) {
+			return err;
 		}
 		args_consumed++;
 	}
 
 	if (ioctl(cdevFd, RSMU_SET_COMBOMODE, &set)) {
-		pr_err("%s: failed - is DPLL %d valid for this part?", __func__, set.dpll);
+		pr_err("%s: failed - is dpll %u and mode %u valid for this part?", __func__, set.dpll, set.mode);
 		return -1;
 	}
 
-	printf("DPLL %d:  set combo mode to %d\n", set.dpll, set.mode);
+	printf("dpll %u: mode = %u\n", set.dpll, set.mode);
 
 	return args_consumed;
 }
 
-
 static int do_set_holdover_mode(int cdevFd, int cmdc, char *cmdv[])
 {
 	struct rsmu_holdover_mode set = {0};
-	int args_consumed = 1;
-	enum parser_result r;
+	int args_consumed = 0;
+	int err;
 
 	if (cmdc < 3 || name_is_a_command(cmdv[0])) {
-		pr_err("%s: missing required dpll, enable, and mode argument", __func__);
+		pr_err("%s: missing required dpll, enable, and mode arguments", __func__);
 		return -2;
 	}
 
-	r = get_ranged_uint(cmdv[0], (unsigned int *)&set.dpll, 0, 7, 0);
-	switch (r) {
-	case PARSED_OK:
-		break;
-	case MALFORMED:
-		pr_err("%s: dpll '%s' is not a valid uint", __func__, cmdv[0]);
-		return -2;
-	case OUT_OF_RANGE:
-		pr_err("%s: dpll '%s' is out of range.", __func__, cmdv[0]);
-		return -2;
-	default:
-		pr_err("%s: couldn't process dpll '%s'", __func__, cmdv[0]);
-		return -2;
+	err = handle_dpll_arg(__func__, cmdv[0], &set.dpll);
+	if (err) {
+		return err;
 	}
+	args_consumed++;
 
-	if (cmdc > 1 && !name_is_a_command(cmdv[1])) {
-		r = get_ranged_uint(cmdv[1], (unsigned int *)&set.enable, 0, 1, 0);
-		switch (r) {
-		case PARSED_OK:
-			break;
-		case MALFORMED:
-			pr_err("%s: enable '%s' is not a valid uint", __func__, cmdv[1]);
-			return -2;
-		case OUT_OF_RANGE:
-			pr_err("%s: enable '%s' is out of range.", __func__, cmdv[1]);
-			return -2;
-		default:
-			pr_err("%s: couldn't process '%s' for count", __func__, cmdv[1]);
-			return -2;
+	if (!name_is_a_command(cmdv[1])) {
+		err = handle_enable_arg(__func__, cmdv[1], &set.enable);
+		if (err) {
+			return err;
 		}
 		args_consumed++;
 	}
 
-	if (cmdc > 2 && !name_is_a_command(cmdv[2])) {
-		r = get_ranged_uint(cmdv[2], (unsigned int *)&set.mode, 0, 1, 0);
-		switch (r) {
-		case PARSED_OK:
-			break;
-		case MALFORMED:
-			pr_err("%s: mode '%s' is not a valid uint", __func__, cmdv[1]);
-			return -2;
-		case OUT_OF_RANGE:
-			pr_err("%s: mode '%s' is out of range.", __func__, cmdv[1]);
-			return -2;
-		default:
-			pr_err("%s: couldn't process '%s' for count", __func__, cmdv[1]);
-			return -2;
+	if (!name_is_a_command(cmdv[2])) {
+		err = handle_mode_arg(__func__, cmdv[1], &set.mode);
+		if (err) {
+			return err;
 		}
 		args_consumed++;
 	}
 
 	if (ioctl(cdevFd, RSMU_SET_HOLDOVER_MODE, &set)) {
-		pr_err("%s: failed - is DPLL %d valid for this part?", __func__, set.dpll);
+		pr_err("%s: failed - is dpll %u valid for this part?", __func__, set.dpll);
 		return -1;
 	}
 
 	return args_consumed;
 }
 
-
 static int do_set_output_tdc_go(int cdevFd, int cmdc, char *cmdv[])
 {
 	struct rsmu_set_output_tdc_go set = {0};
-	int args_consumed = 1;
-	enum parser_result r;
+	int args_consumed = 0;
+	int err;
 
 	if (cmdc < 2 || name_is_a_command(cmdv[0])) {
 		pr_err("%s: missing required tdc and enable arguments", __func__);
 		return -2;
 	}
 
-	r = get_ranged_uint(cmdv[0], (unsigned int *)&set.tdc, 0, 3, 0);
-	switch (r) {
-	case PARSED_OK:
-		break;
-	case MALFORMED:
-		pr_err("%s: tdc '%s' is not a valid uint", __func__, cmdv[0]);
-		return -2;
-	case OUT_OF_RANGE:
-		pr_err("%s: tdc '%s' is out of range.", __func__, cmdv[0]);
-		return -2;
-	default:
-		pr_err("%s: couldn't process tdc '%s'", __func__, cmdv[0]);
+	err = handle_tdc_arg(__func__, cmdv[0], &set.tdc);
+	if (err) {
 		return -2;
 	}
 
-	if (cmdc > 1 && !name_is_a_command(cmdv[1])) {
-		r = get_ranged_uint(cmdv[1], (unsigned int *)&set.enable, 0, 1, 0);
-		switch (r) {
-		case PARSED_OK:
-			break;
-		case MALFORMED:
-			pr_err("%s: enable '%s' is not a valid uint", __func__, cmdv[1]);
-			return -2;
-		case OUT_OF_RANGE:
-			pr_err("%s: enable '%s' is out of range.", __func__, cmdv[1]);
-			return -2;
-		default:
-			pr_err("%s: couldn't process '%s' for count", __func__, cmdv[1]);
-			return -2;
+	if (!name_is_a_command(cmdv[1])) {
+		err = handle_enable_arg(__func__, cmdv[1], &set.enable);
+		if (err) {
+			return err;
 		}
 		args_consumed++;
 	}
 
 	if (ioctl(cdevFd, RSMU_SET_OUTPUT_TDC_GO, &set)) {
-		pr_err("%s: failed - is TDC %d valid for this part?", __func__, set.tdc);
+		pr_err("%s: failed - is tdc %u valid for this part?", __func__, set.tdc);
 		return -1;
 	}
 
 	return args_consumed;
 }
 
-
 static int do_wait(int fd, int cmdc, char *cmdv[])
 {
 	double time_arg;
 	struct timespec ts;
 	struct itimerval timer;
-	enum parser_result r;
+	int err;
 
 	if (cmdc < 1 || name_is_a_command(cmdv[0])) {
-		pr_err("wait: requires sleep duration argument\n");
+		pr_err("%s: missing required sleep duration argument\n", __func__);
 		return -2;
 	}
 
 	memset(&timer, 0, sizeof(timer));
 
 	/* parse the double time offset argument */
-	r = get_ranged_double(cmdv[0], &time_arg, 0.0, DBL_MAX);
-	switch (r) {
-	case PARSED_OK:
-		break;
-	case MALFORMED:
-		pr_err("wait: '%s' is not a valid double", cmdv[0]);
-		return -2;
-	case OUT_OF_RANGE:
-		pr_err("wait: '%s' is out of range.", cmdv[0]);
-		return -2;
-	default:
-		pr_err("wait: couldn't process '%s'", cmdv[0]);
-		return -2;
+	err = handle_time_arg(__func__, cmdv[0], &time_arg);
+	if (err) {
+		return err;
 	}
 
 	double_to_timespec(time_arg, &ts);
@@ -510,86 +828,51 @@ static int do_wait(int fd, int cmdc, char *cmdv[])
 static int do_wr(int cdevFd, int cmdc, char *cmdv[])
 {
 	struct rsmu_reg_rw set = {0};
-	unsigned int count = 1;
-	int args_consumed = 1;
-	enum parser_result r;
-	unsigned int val = 0;
-	unsigned int offset;
+	unsigned char count = 1;
+	int args_consumed = 0;
 	int i;
+	int err;
 
 	if (cmdc < 2 || name_is_a_command(cmdv[0])) {
-		pr_err("wr: missing required offset and byte_value argument");
+		pr_err("%s: missing required offset and byte_value arguments", __func__);
 		return -2;
 	}
 
 	/* Extend to access page registers and SYS RAM3 */
-	r = get_ranged_uint(cmdv[0], &offset, 0, 0x20120000, 16);
-	set.offset = offset;
-
-	switch (r) {
-	case PARSED_OK:
-		break;
-	case MALFORMED:
-		pr_err("wr: offset '%s' is not a valid uint", cmdv[0]);
-		return -2;
-	case OUT_OF_RANGE:
-		pr_err("wr: offset '%s' is out of range.", cmdv[0]);
-		return -2;
-	default:
-		pr_err("wr: ofset couldn't process '%s'", cmdv[0]);
-		return -2;
+	err = handle_offset_arg(__func__, cmdv[0], &set.offset);
+	if (err) {
+		return err;
 	}
+	args_consumed++;
 
 	if (cmdc > 1 && !name_is_a_command(cmdv[1])) {
-		r = get_ranged_uint(cmdv[1], &count, 1, 256, 0);
-		switch (r) {
-		case PARSED_OK:
-			break;
-		case MALFORMED:
-			pr_err("wr: count '%s' is not a valid uint", cmdv[1]);
-			return -2;
-		case OUT_OF_RANGE:
-			pr_err("wr: count '%s' is out of range.", cmdv[1]);
-			return -2;
-		default:
-			pr_err("wr: couldn't process '%s' for count", cmdv[1]);
-			return -2;
+		err = handle_count_arg(__func__, cmdv[1], &count);
+		if (err) {
+			return err;
 		}
 		args_consumed++;
 	}
 	set.byte_count = count;
 
 	if (cmdc < count + 2) {
-		pr_err("wr: Not enough arguments to satisfy byte count %d", count);
+		pr_err("%s: Not enough arguments to satisfy byte count %d", __func__, count);
 		return -3;
 	}
 
 	for (i = 0; i < count; i++) {
 		if (name_is_a_command(cmdv[2 + i])) {
-			pr_err("wr: byte %d is a command, %s", i, cmdv[2 + i]);
+			pr_err("%s: byte %d is a command, %s", __func__, i, cmdv[2 + i]);
+			return -2;
 		}
-
-		r = get_ranged_uint(cmdv[2 + i], &val, 0, 256, 16);
-		switch (r) {
-		case PARSED_OK:
-			break;
-		case MALFORMED:
-			pr_err("wr: val '%s' is not a valid uint", cmdv[2 + i]);
-			return -2;
-		case OUT_OF_RANGE:
-			pr_err("wr: val '%s' is out of range.", cmdv[2 + i]);
-			return -2;
-		default:
-			pr_err("wr: val couldn't process '%s'", cmdv[2 + i]);
-			return -2;
+		err = handle_write_val_arg(__func__, cmdv[2 + i], &set.bytes[i]);
+		if (err) {
+			return err;
 		}
 		args_consumed++;
-		set.bytes[i] = val;
 	}
 
 	if (ioctl(cdevFd, RSMU_REG_WRITE, &set)) {
-		pr_err("%s: failed", __func__);
-		perror("RSMU_REG_WRITE failed");
+		pr_err("%s: RSMU_REG_WRITE failed", __func__);
 		return -1;
 	}
 
@@ -604,9 +887,12 @@ static int do_wr(int cdevFd, int cmdc, char *cmdv[])
 }
 
 static const struct cmd_t all_commands[] = {
+	{ "get_current_clock_index", &do_get_current_clock_index },
 	{ "get_ffo", &do_get_ffo },
+	{ "get_reference_monitor_status", &do_get_reference_monitor_status },
 	{ "get_state", &do_get_state },
 	{ "rd", &do_rd },
+	{ "set_clock_priorities", &do_set_clock_priorities },
 	{ "set_combo_mode", &do_set_combo_mode },
 	{ "set_holdover_mode", &do_set_holdover_mode },
 	{ "set_output_tdc_go", &do_set_output_tdc_go },
@@ -731,7 +1017,7 @@ int main(int argc, char *argv[])
 	pr_info("Opening %s ...", argv[optind]);
 
 	fd = open(argv[optind], O_WRONLY);
-	if( fd < 0 ) {
+	if ( fd < 0 ) {
 		perror("Open failed");
 		return -1;
 	}

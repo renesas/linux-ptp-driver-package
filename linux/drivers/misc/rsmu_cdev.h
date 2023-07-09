@@ -11,6 +11,7 @@
 #include <linux/firmware.h>
 #include <linux/miscdevice.h>
 #include <linux/regmap.h>
+#include <uapi/linux/rsmu.h>
 
 struct rsmu_ops;
 
@@ -92,6 +93,11 @@ struct rsmu_ops {
 	int (*set_output_tdc_go)(struct rsmu_cdev *rsmu, u8 tdc,
 				 u8 enable);
 	int (*load_firmware)(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX]);
+	int (*get_clock_index)(struct rsmu_cdev *rsmu, u8 dpll, s8 *clock_index);
+	int (*set_clock_priorities)(struct rsmu_cdev *rsmu, u8 dpll, u8 number_entries,
+				    struct rsmu_priority_entry *priority_entry);
+	int (*get_reference_monitor_status)(struct rsmu_cdev *rsmu, u8 clock_index,
+					    struct rsmu_reference_monitor_status_alarms *alarms);
 };
 
 /**
