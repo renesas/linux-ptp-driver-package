@@ -21,7 +21,6 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/mfd/rsmu.h>
-#include <uapi/linux/rsmu.h>
 #include "rsmu_cdev.h"
 
 static DEFINE_IDA(rsmu_cdev_map);
@@ -181,6 +180,76 @@ rsmu_reg_write(struct rsmu_cdev *rsmu, void __user *arg)
 	return err;
 }
 
+static int
+rsmu_get_clock_index(struct rsmu_cdev *rsmu, void __user *arg)
+{
+	struct rsmu_ops *ops = rsmu->ops;
+	struct rsmu_current_clock_index request;
+	s8 clock_index;
+	int err;
+
+	if (copy_from_user(&request, arg, sizeof(request)))
+		return -EFAULT;
+
+	if (ops->get_clock_index == NULL)
+		return -ENOTSUPP;
+
+	mutex_lock(rsmu->lock);
+	err = ops->get_clock_index(rsmu, request.dpll, &clock_index);
+	mutex_unlock(rsmu->lock);
+
+	request.clock_index = clock_index;
+	if (copy_to_user(arg, &request, sizeof(request)))
+		return -EFAULT;
+
+	return err;
+}
+
+static int
+rsmu_set_clock_priorities(struct rsmu_cdev *rsmu, void __user *arg)
+{
+	struct rsmu_ops *ops = rsmu->ops;
+	struct rsmu_clock_priorities request;
+	int err;
+
+	if (copy_from_user(&request, arg, sizeof(request)))
+		return -EFAULT;
+
+	if (ops->set_clock_priorities == NULL)
+		return -ENOTSUPP;
+
+	mutex_lock(rsmu->lock);
+	err = ops->set_clock_priorities(rsmu, request.dpll, request.num_entries, request.priority_entry);
+	mutex_unlock(rsmu->lock);
+
+	return err;
+}
+
+static int
+rsmu_get_reference_monitor_status(struct rsmu_cdev *rsmu, void __user *arg)
+{
+	struct rsmu_ops *ops = rsmu->ops;
+	struct rsmu_reference_monitor_status request;
+	struct rsmu_reference_monitor_status_alarms alarms;
+	int err;
+
+	if (copy_from_user(&request, arg, sizeof(request)))
+		return -EFAULT;
+
+	if (ops->get_reference_monitor_status == NULL)
+		return -ENOTSUPP;
+
+	mutex_lock(rsmu->lock);
+	err = ops->get_reference_monitor_status(rsmu, request.clock_index, &alarms);
+	mutex_unlock(rsmu->lock);
+
+	memcpy(&request.alarms, &alarms, sizeof(alarms));
+	if (copy_to_user(arg, &request, sizeof(request)))
+		return -EFAULT;
+
+	return err;
+}
+
 static struct rsmu_cdev *file2rsmu(struct file *file)
 {
 	return container_of(file->private_data, struct rsmu_cdev, miscdev);
@@ -208,6 +277,15 @@ rsmu_ioctl(struct file *fptr, unsigned int cmd, unsigned long data)
 		break;
 	case RSMU_SET_OUTPUT_TDC_GO:
 		err = rsmu_set_output_tdc_go(rsmu, arg);
+		break;
+	case RSMU_GET_CURRENT_CLOCK_INDEX:
+		err = rsmu_get_clock_index(rsmu, arg);
+		break;
+	case RSMU_SET_CLOCK_PRIORITIES:
+		err = rsmu_set_clock_priorities(rsmu, arg);
+		break;
+	case RSMU_GET_REFERENCE_MONITOR_STATUS:
+		err = rsmu_get_reference_monitor_status(rsmu, arg);
 		break;
 	case RSMU_REG_READ:
 		err = rsmu_reg_read(rsmu, arg);
