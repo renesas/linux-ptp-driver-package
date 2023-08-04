@@ -1,0 +1,71 @@
+From ed5c2f5fd10dda07263f79f338a512c0f49f76f5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Uwe=20Kleine-K=C3=B6nig?= <u.kleine-koenig@pengutronix.de>
+Date: Mon, 15 Aug 2022 10:02:30 +0200
+Subject: [PATCH 1/5] i2c: Make remove callback return void
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The value returned by an i2c driver's remove function is mostly ignored.
+(Only an error message is printed if the value is non-zero that the
+error is ignored.)
+
+So change the prototype of the remove function to return no value. This
+way driver authors are not tempted to assume that passing an error to
+the upper layer is a good idea. All drivers are adapted accordingly.
+There is no intended change of behaviour, all callbacks were prepared to
+return 0 before.
+
+Reviewed-by: Peter Senna Tschudin <peter.senna@gmail.com>
+Reviewed-by: Jeremy Kerr <jk@codeconstruct.com.au>
+Reviewed-by: Benjamin Mugnier <benjamin.mugnier@foss.st.com>
+Reviewed-by: Javier Martinez Canillas <javierm@redhat.com>
+Reviewed-by: Crt Mori <cmo@melexis.com>
+Reviewed-by: Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Acked-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Acked-by: Marek Behún <kabel@kernel.org> # for leds-turris-omnia
+Acked-by: Andy Shevchenko <andriy.shevchenko@linux.intel.com>
+Reviewed-by: Petr Machata <petrm@nvidia.com> # for mlxsw
+Reviewed-by: Maximilian Luz <luzmaximilian@gmail.com> # for surface3_power
+Acked-by: Srinivas Pandruvada <srinivas.pandruvada@linux.intel.com> # for bmc150-accel-i2c + kxcjk-1013
+Reviewed-by: Hans Verkuil <hverkuil-cisco@xs4all.nl> # for media/* + staging/media/*
+Acked-by: Miguel Ojeda <ojeda@kernel.org> # for auxdisplay/ht16k33 + auxdisplay/lcd2s
+Reviewed-by: Luca Ceresoli <luca.ceresoli@bootlin.com> # for versaclock5
+Reviewed-by: Ajay Gupta <ajayg@nvidia.com> # for ucsi_ccg
+Acked-by: Jonathan Cameron <Jonathan.Cameron@huawei.com> # for iio
+Acked-by: Peter Rosin <peda@axentia.se> # for i2c-mux-*, max9860
+Acked-by: Adrien Grassein <adrien.grassein@gmail.com> # for lontium-lt8912b
+Reviewed-by: Jean Delvare <jdelvare@suse.de> # for hwmon, i2c-core and i2c/muxes
+Acked-by: Corey Minyard <cminyard@mvista.com> # for IPMI
+Reviewed-by: Vladimir Oltean <olteanv@gmail.com>
+Acked-by: Dmitry Torokhov <dmitry.torokhov@gmail.com>
+Acked-by: Sebastian Reichel <sebastian.reichel@collabora.com> # for drivers/power
+Acked-by: Krzysztof Hałasa <khalasa@piap.pl>
+Signed-off-by: Uwe Kleine-König <u.kleine-koenig@pengutronix.de>
+Signed-off-by: Wolfram Sang <wsa@kernel.org>
+---
+ drivers/mfd/rsmu_i2c.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/drivers/mfd/rsmu_i2c.c b/drivers/mfd/rsmu_i2c.c
+index dc001c9791c1..f716ab8039a0 100644
+--- a/drivers/mfd/rsmu_i2c.c
++++ b/drivers/mfd/rsmu_i2c.c
+@@ -146,13 +146,11 @@ static int rsmu_i2c_probe(struct i2c_client *client,
+ 	return rsmu_core_init(rsmu);
+ }
+ 
+-static int rsmu_i2c_remove(struct i2c_client *client)
++static void rsmu_i2c_remove(struct i2c_client *client)
+ {
+ 	struct rsmu_ddata *rsmu = i2c_get_clientdata(client);
+ 
+ 	rsmu_core_exit(rsmu);
+-
+-	return 0;
+ }
+ 
+ static const struct i2c_device_id rsmu_i2c_id[] = {
+-- 
+2.34.1
+
