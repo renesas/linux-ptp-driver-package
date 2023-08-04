@@ -17,7 +17,7 @@ Microsoft Studio Code (https://code.visualstudio.com/) can be used to view a ren
 ## Revision History
 | Version               | Package                                                 |
 |-----------------------|---------------------------------------------------------|
-| pcm4l 4.2.1 and above | 1.0                                                     |
+| pcm4l 4.2.1 and above | 2.0                                                     |
 | pcm4l 4.2.0           | Renesas_MFD_PTP_MISC_patches_2022_07_25_5ecd2144.tar.gz |
 | pcm4l 4.1.4           | Renesas_MFD_PTP_MISC_patches_2022_02_24_e9d9162c.tar.gz |
 | pcm4l 4.1.3 and below	| Renesas_MFD_PTP_MISC_patches_2021_09_17_59227acc.tar.gz |
@@ -31,7 +31,9 @@ Microsoft Studio Code (https://code.visualstudio.com/) can be used to view a ren
 3. [Getting Started](#getting-started)
    * [Integrate driver files](#integrate-driver-files)
    * [Apply patch files](#apply-patch-files-to-driver-files-andor-kernel)
-     * [Linux v5.8+](#linux-v518)
+     * [Linux v6.3 - v6.5-rc4](#linux-v63---v65-rc4) 
+     * [Linux v6.1 - v6.2](#linux-v61---v62) 
+     * [Linux v5.8 - v6.0](#linux-v518---v60)
      * [Linux v5.4 - v5.7](#linux-v54---v57)
      * [Linux v4.13 - v5.3](#linux-v413---v53)
      * [Linux v4.11 - v4.12](#linux-v411---412)
@@ -217,11 +219,33 @@ If a specific kernel feature is needed, the driver may be able to be modified to
 
 Below are some example scenarios where patch files can be applied to modify the driver or the kernel source.
 
-### Linux v5.18+
+### Linux v6.3 - v6.5-rc4
+
+In 6.3, i2c_device_id parameter is removed.
+
+```
+In ptp-driver-package repository root directory, target linux kernel is "../linux-stable":
+
+$ patch --directory=../linux-stable -p1 < patches/0001-Change-spi-remove-func-return-void.patch
+$ patch --directory=../linux-stable -p1 < patches/0001-i2c-Make-remove-callback-return-void.patch
+$ patch --directory=../linux-stable -p1 < patches/0002-mfd-rsmu_i2c-Convert-to-i2c-s-.probe_new.patch
+$ patch --directory=../linux-stable -p1 < patches/0003-mfd-Switch-i2c-drivers-back-to-use-.probe.patch
+```
+
+### Linux v6.1 - v6.2
+
+In 6.1, I2C driver changed to return void from int.
+
+```
+In ptp-driver-package repository root directory, target linux kernel is "../linux-stable":
+
+$ patch --directory=../linux-stable -p1 < patches/0001-Change-spi-remove-func-return-void.patch
+$ patch --directory=../linux-stable -p1 < patches/0001-i2c-Make-remove-callback-return-void.patch
+```
+
+### Linux v5.18 - v6.0
 
 In 5.18, SPI driver "remove" callback was changed to a void function.
-
-Need to apply patch to update Renesas PTP SPI driver to update "remove" function to a void from int.
 
 ```
 In ptp-driver-package repository root directory, target linux kernel is "../linux-stable":
@@ -550,7 +574,16 @@ uio_pdrv_genirq 16384 0 - Live 0xffff800008db0000
 #
 # Load MFD/MISC driver
 #
+#   MFD also supports loading configuration file in a system configuration that
+#   does not have a corresponding PHC driver.
+#
+#   By default the MFD driver will look for 'rsmu8A34xxx.bin', if not found an error message
+#   will display, but this can be ignored if configuration is taken care of by PHC driver.
+#
 root@xilinx-zcu670-2021_2:~# modprobe rsmu-i2c
+root@xilinx-zcu670-2021_2:~# [  428.620347] rsmu-cdev 8a3400x-cdev.2.auto: requesting firmware 'rsmu8A34xxx.bin'
+root@xilinx-zcu670-2021_2:~# [  428.627829] rsmu-cdev 8a3400x-cdev.2.auto: Direct firmware load for rsmu8A34xxx.bin failed with error -2
+root@xilinx-zcu670-2021_2:~# [  428.637368] rsmu-cdev 8a3400x-cdev.2.auto: Loading firmware rsmu8A34xxx.bin failed !!!
 root@xilinx-zcu670-2021_2:~# [  428.631925] rsmu-cdev 8a3400x-cdev.2.auto: Probe rsmu0 successful
 
 #
