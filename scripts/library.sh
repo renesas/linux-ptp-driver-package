@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 clean_driver_ptp_Kconfig()
 {
@@ -93,7 +93,7 @@ insert_driver_ptp_Makefile()
 clean_driver_mfd_Makefile()
 {
     TGT_FILE=$1/Makefile
-    echo ${FUNCNAME[0]}:
+#    echo ${FUNCNAME[0]}:
     echo '    TGT_FILE =' ${TGT_FILE}
 
     sed -i '/rsmu-i2c/d' $TGT_FILE

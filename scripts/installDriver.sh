@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # set -x
 
 echo "SRC_DIR = $1"
