@@ -1,0 +1,37 @@
+From 9816d859239f6d037fef168bdfa1ea1c12e3a76e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Uwe=20Kleine-K=C3=B6nig?= <u.kleine-koenig@pengutronix.de>
+Date: Mon, 15 May 2023 20:27:52 +0200
+Subject: [PATCH 5/5] mfd: Switch i2c drivers back to use .probe()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+After commit b8a1a4cd5a98 ("i2c: Provide a temporary .probe_new()
+call-back type"), all drivers being converted to .probe_new() and then
+03c835f498b5 ("i2c: Switch .probe() to not take an id parameter") convert
+back to (the new) .probe() to be able to eventually drop .probe_new() from
+struct i2c_driver.
+
+Signed-off-by: Uwe Kleine-König <u.kleine-koenig@pengutronix.de>
+Link: https://lore.kernel.org/r/20230515182752.10050-1-u.kleine-koenig@pengutronix.de
+Signed-off-by: Lee Jones <lee@kernel.org>
+---
+ drivers/mfd/rsmu_i2c.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/mfd/rsmu_i2c.c b/drivers/mfd/rsmu_i2c.c
+index 807c32101460..26972a5aff45 100644
+--- a/drivers/mfd/rsmu_i2c.c
++++ b/drivers/mfd/rsmu_i2c.c
+@@ -279,7 +279,7 @@ static struct i2c_driver rsmu_i2c_driver = {
+ 		.name = "rsmu-i2c",
+ 		.of_match_table = of_match_ptr(rsmu_i2c_of_match),
+ 	},
+-	.probe_new = rsmu_i2c_probe,
++	.probe = rsmu_i2c_probe,
+ 	.remove	= rsmu_i2c_remove,
+ 	.id_table = rsmu_i2c_id,
+ };
+-- 
+2.34.1
+
