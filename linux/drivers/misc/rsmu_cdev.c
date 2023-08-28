@@ -374,7 +374,10 @@ rsmu_probe(struct platform_device *pdev)
 	}
 
 	if (rsmu->ops->load_firmware) {
-		(void)rsmu->ops->load_firmware(rsmu, firmware);
+		err = rsmu->ops->load_firmware(rsmu, firmware);
+		if (err) {
+			dev_warn(rsmu->dev, "loading firmware failed with %d", err);			
+		}
 	}
 
 	/* Initialize and register the miscdev */
