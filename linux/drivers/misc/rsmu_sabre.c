@@ -346,6 +346,10 @@ struct rsmu_ops sabre_ops = {
 	.get_dpll_state = rsmu_sabre_get_dpll_state,
 	.get_dpll_ffo = rsmu_sabre_get_dpll_ffo,
 	.set_holdover_mode = rsmu_sabre_set_holdover_mode,
+	.set_output_tdc_go = NULL,
 	.get_fw_version = NULL,
 	.load_firmware = rsmu_sabre_load_firmware,
+	.get_clock_index = NULL,
+	.set_clock_priorities = NULL,
+	.get_reference_monitor_status = NULL
 };

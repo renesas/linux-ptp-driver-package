@@ -167,10 +167,10 @@ static void usage(const char *progname)
 		"                                                      1   FREQ_OFFSET\n"
 		"                                                      2   FAST_AVG_FREQ_OFFSET\n"
 		"                                                      3   PLL_COMBO_MODE_HOLD\n"
-		"  set_holdover_mode <dpll_n> <enable> <mode>        set holdover mode\n"
-		"  set_output_tdc_go <tdc_n> <enable>                set output TDC go bit\n"
-		"  wait <seconds>                                    pause <seconds> between commands\n"
-		"  wr <offset (hex)> <count> <val (hex)>             write [count] bytes with <val> to <offset>\n"
+		"  set_holdover_mode <dpll_n> <enable> <mode>       set holdover mode\n"
+		"  set_output_tdc_go <tdc_n> <enable>               set output TDC go bit\n"
+		"  wait <seconds>                                   pause <seconds> between commands\n"
+		"  wr <offset (hex)> <count> <val (hex)>            write [count] bytes with <val> to <offset>\n"
 		"\n",
 		progname);
 }
@@ -674,7 +674,7 @@ static int do_set_clock_priorities(int cdevFd, int cmdc, char *cmdv[])
 	}
 
 	if (ioctl(cdevFd, RSMU_SET_CLOCK_PRIORITIES, &set)) {
-		pr_err("%s: failed - is dpll %u valid for this part?", __func__, set.dpll);
+		pr_err("%s: failed - is dpll %u and number of entries %u valid for this part?", __func__, set.dpll, set.num_entries);
 		return -1;
 	}
 
