@@ -41,7 +41,11 @@
 #define TDC_REF_DIV_CONFIG_MASK		GENMASK(2, 0)
 
 /* TIME SYNC CHANNEL */
-#define TIME_CLOCK_SRC	(0xa01) /* Specific to FC3W */
+#define TIME_CLOCK_SRC		(0xa01) /* Specific to FC3W */
+#define TIME_CLOCK_COUNT	(0xa00) /* Specific to FC3W */
+#define TIME_CLOCK_COUNT_MASK	GENMASK(5, 0)
+
+#define SUB_SYNC_GEN_CNFG	(0xa04)
 
 #define TOD_COUNTER_READ_REQ		(0xa5f)
 #define TOD_COUNTER_READ_REQ_VFC3A	(0x6df)
@@ -72,6 +76,34 @@ enum lpf_mode {
 #define LPF_WR_PHASE_CTRL_VFC3A	(0x728)
 #define LPF_WR_FREQ_CTRL	(0xab0)
 #define LPF_WR_FREQ_CTRL_VFC3A	(0x730)
+
+#define TIME_CLOCK_MEAS_CNFG	(0xB04)
+#define TDC_MEAS_MODE	BIT(0)
+enum tdc_meas_mode {
+	CONTINUOUS = 0,
+	ONE_SHOT = 1,
+	MEAS_MODE_INVALID = 2,
+};
+
+#define TIME_CLOCK_MEAS_DIV_CNFG	(0xB08)
+#define TIME_REF_DIV_MASK	GENMASK(29, 24)
+
+#define TIME_CLOCK_MEAS_CTRL	(0xB10)
+#define TDC_MEAS_EN	BIT(0)
+#define TDC_MEAS_START	BIT(1)
+
+#define TDC_FIFO_READ_REQ	(0xB2F)
+#define TDC_FIFO_READ		(0xB30)
+#define COARSE_MEAS_MASK	GENMASK(39, 13)
+#define FINE_MEAS_MASK		GENMASK(12, 0)
+
+#define TDC_FIFO_CTRL		(0xB12)
+#define FIFO_CLEAR		BIT(0)
+#define TDC_FIFO_STS		(0xB38)
+#define FIFO_FULL		BIT(1)
+#define FIFO_EMPTY		BIT(0)
+#define TDC_FIFO_EVENT		(0xB39)
+#define FIFO_OVERRUN		BIT(1)
 
 /* DPLL */
 #define MAX_REFERENCE_INDEX	(3)
@@ -156,11 +188,62 @@ enum {
 	FREQ_MAX
 };
 
+struct idtfc3_hw_param {
+	u32 xtal_freq;
+	u32 time_clk_freq;
+};
+
 struct idtfc3_fwrc {
 	u8 hiaddr;
 	u8 loaddr;
 	u8 value;
 	u8 reserved;
 } __packed;
+
+static inline void idtfc3_default_hw_param(struct idtfc3_hw_param *hw_param)
+{
+	hw_param->xtal_freq = 49152000;
+	hw_param->time_clk_freq = 25000000;
+}
+
+static inline int idtfc3_set_hw_param(struct idtfc3_hw_param *hw_param,
+				      u16 addr, u8 val)
+{
+	if (addr == XTAL_FREQ_ADDR)
+		switch (val) {
+		case FREQ_49_152M:
+			hw_param->xtal_freq = 49152000;
+			break;
+		case FREQ_50M:
+			hw_param->xtal_freq = 50000000;
+			break;
+		default:
+			return -EINVAL;
+		}
+	else if (addr == TIME_CLK_FREQ_ADDR)
+		switch (val) {
+		case FREQ_25M:
+			hw_param->time_clk_freq = 25000000;
+			break;
+		case FREQ_50M:
+			hw_param->time_clk_freq = 50000000;
+			break;
+		case FREQ_100M:
+			hw_param->time_clk_freq = 100000000;
+			break;
+		case FREQ_125M:
+			hw_param->time_clk_freq = 125000000;
+			break;
+		case FREQ_250M:
+			hw_param->time_clk_freq = 250000000;
+			break;
+		default:
+			return -EINVAL;
+		}
+	else
+		return -EFAULT;
+
+	return 0;
+}
 
 #endif

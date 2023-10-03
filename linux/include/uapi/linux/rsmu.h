@@ -13,6 +13,7 @@
 #include <linux/ioctl.h>
 
 #define MAX_NUM_PRIORITY_ENTRIES 32
+#define TDC_FIFO_SIZE 16
 
 /* Set dpll combomode */
 struct rsmu_combomode {
@@ -86,6 +87,12 @@ struct rsmu_reference_monitor_status
 {
 	__u8 clock_index;
 	struct rsmu_reference_monitor_status_alarms alarms;
+};
+
+/* Get a TDC single-shot measurement in nanosecond */
+struct rsmu_get_tdc_meas {
+	bool continuous;
+	__s64 offset;
 };
 
 /*
@@ -166,6 +173,15 @@ struct rsmu_reference_monitor_status
  * pointer to struct rsmu_reference_monitor_status that contains reference monitor status
  */
 #define RSMU_GET_REFERENCE_MONITOR_STATUS  _IOR(RSMU_MAGIC, 8, struct rsmu_reference_monitor_status)
+
+/**
+ * @Description
+ * ioctl to get a one-shot tdc measurement (FC3W only).
+ *
+ * @Parameters
+ * pointer to struct rsmu_get_tdc_meas that contains a one-shot tdc measurement
+ */
+#define RSMU_GET_TDC_MEAS  _IOR(RSMU_MAGIC, 9, struct rsmu_get_tdc_meas)
 
 #define RSMU_REG_READ   _IOR(RSMU_MAGIC, 100, struct rsmu_reg_rw)
 #define RSMU_REG_WRITE  _IOR(RSMU_MAGIC, 101, struct rsmu_reg_rw)
