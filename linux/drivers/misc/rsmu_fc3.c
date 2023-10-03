@@ -15,17 +15,23 @@
 #include "rsmu_cdev.h"
 
 #define FW_FILENAME	"rsmufc3.bin"
+#define DEVID(rsmu)	(((struct rsmufc3 *)rsmu->ddata)->devid)
+#define HW_PARAM(rsmu)	(&((struct rsmufc3 *)rsmu->ddata)->hw_param)
+#define MEAS_MODE(rsmu)	(((struct rsmufc3 *)rsmu->ddata)->meas_mode)
+#define TDC_APLL(rsmu)	(((struct rsmufc3 *)rsmu->ddata)->tdc_apll_freq)
+#define TIME_REF(rsmu)	(((struct rsmufc3 *)rsmu->ddata)->time_ref_freq)
 
-static int check_and_set_masks(struct rsmu_cdev *rsmu, u16 addr, u8 val)
+struct rsmufc3 {
+	u8 devid;
+	u8 meas_mode;
+	struct idtfc3_hw_param hw_param;
+	u32 tdc_apll_freq;
+	u32 time_ref_freq;
+};
+
+static int get_apll_reinit_reg_offset(u8 devid, u16 *apll_reinit_reg_offset)
 {
-	int err = 0;
-
-	return err;
-}
-
-static int get_apll_reinit_reg_offset(enum fw_version fw_ver, u16 *apll_reinit_reg_offset)
-{
-	switch (fw_ver) {
+	switch (devid) {
 	case V_DEFAULT:
 	case VFC3W:
 		*apll_reinit_reg_offset = SOFT_RESET_CTRL;
@@ -40,39 +46,149 @@ static int get_apll_reinit_reg_offset(enum fw_version fw_ver, u16 *apll_reinit_r
 	return 0;
 }
 
-static int read_device_id(struct rsmu_cdev *rsmu, u16 *device_id)
+static int read_device_id(struct rsmu_cdev *rsmu)
 {
 	int err;
 	u8 buf[2] = {0};
+	u16 device_id;
 
-	err = regmap_bulk_read(rsmu->regmap, DEVICE_ID,
-			       &buf, sizeof(buf));
+	err = regmap_bulk_read(rsmu->regmap, DEVICE_ID, buf, sizeof(buf));
 	if (err)
 		return err;
 
-	*device_id = get_unaligned_le16(buf);
+	device_id = get_unaligned_le16(buf);
+
+	if (device_id & DEVICE_ID_MASK) {
+		DEVID(rsmu) = VFC3W;
+	} else {
+		DEVID(rsmu) = VFC3A;
+	}
+
+	dev_info(rsmu->dev, "identified %s device\n",
+		 DEVID(rsmu) == VFC3W ? "FC3W" : "FC3A");
 
 	return 0;
+}
+
+static int rsmu_get_tdc_apll_freq(struct rsmu_cdev *rsmu)
+{
+	int err;
+	u8 tdc_fb_div_int;
+	u8 tdc_ref_div;
+
+	err = regmap_bulk_read(rsmu->regmap, TDC_REF_DIV_CNFG,
+				&tdc_ref_div, sizeof(tdc_ref_div));
+	if (err)
+		return err;
+
+	err = regmap_bulk_read(rsmu->regmap, TDC_FB_DIV_INT_CNFG,
+				&tdc_fb_div_int, sizeof(tdc_fb_div_int));
+	if (err)
+		return err;
+
+	tdc_fb_div_int &= TDC_FB_DIV_INT_MASK;
+	tdc_ref_div &= TDC_REF_DIV_CONFIG_MASK;
+
+	TDC_APLL(rsmu) = div_u64(HW_PARAM(rsmu)->xtal_freq * 
+				 (u64)tdc_fb_div_int, 1 << tdc_ref_div);
+
+	return 0;
+}
+
+static int rsmu_get_time_ref_freq(struct rsmu_cdev *rsmu)
+{
+	int err;
+	u8 buf[4];
+	u8 time_ref_div;
+	u8 time_clk_div;
+
+	err = regmap_bulk_read(rsmu->regmap, TIME_CLOCK_MEAS_DIV_CNFG, buf, sizeof(buf));
+	if (err)
+		return err;
+	time_ref_div = FIELD_GET(TIME_REF_DIV_MASK, get_unaligned_le32(buf)) + 1;
+
+	err = regmap_bulk_read(rsmu->regmap, TIME_CLOCK_COUNT, buf, 1);
+	if (err)
+		return err;
+	time_clk_div = (buf[0] & TIME_CLOCK_COUNT_MASK) + 1;
+	TIME_REF(rsmu) = HW_PARAM(rsmu)->time_clk_freq * time_clk_div / time_ref_div;
+
+	return 0;
+}
+
+static int set_tdc_meas_mode(struct rsmu_cdev *rsmu, u8 meas_mode)
+{
+	int err;
+	u8 val = 0;
+
+	if(meas_mode >= MEAS_MODE_INVALID)
+		return -EINVAL;
+
+	if(MEAS_MODE(rsmu) == meas_mode)
+		return 0;
+
+	/* Disable TDC first */
+	err = regmap_bulk_write(rsmu->regmap, TIME_CLOCK_MEAS_CTRL, &val, sizeof(val));
+	if (err)
+		return err;
+
+	/* Change TDC meas mode */
+	err = regmap_bulk_write(rsmu->regmap, TIME_CLOCK_MEAS_CNFG,
+				&meas_mode, sizeof(meas_mode));
+	if (err)
+		return err;
+
+	MEAS_MODE(rsmu) = meas_mode;
+
+	if (meas_mode == ONE_SHOT)
+		return 0;
+
+	/* Enable TDC and start measurement */
+	val = TDC_MEAS_START | TDC_MEAS_EN;
+	err = regmap_bulk_write(rsmu->regmap, TIME_CLOCK_MEAS_CTRL, &val, sizeof(val));
+	if (err)
+		return err; 
+
+	return 0;
+}
+
+static int hw_init(struct rsmu_cdev *rsmu)
+{
+	int err;
+
+	if (DEVID(rsmu) == VFC3A)
+		return 0;
+
+	MEAS_MODE(rsmu) = MEAS_MODE_INVALID;
+	err = set_tdc_meas_mode(rsmu, ONE_SHOT);
+	if (err)
+		return err;
+
+	err = rsmu_get_time_ref_freq(rsmu);
+	if (err)
+		return err;
+
+	return rsmu_get_tdc_apll_freq(rsmu);
 }
 
 static int hw_calibrate(struct rsmu_cdev *rsmu)
 {
 	int err = 0;
 	u8 val;
-	enum fw_version fw_ver = rsmu->fw_version;
+	u8 devid = DEVID(rsmu);
 	u16 apll_reinit_reg_addr;
 	u8 apll_reinit_mask;
 
-	err = get_apll_reinit_reg_offset(fw_ver, &apll_reinit_reg_addr);
+	err = get_apll_reinit_reg_offset(devid, &apll_reinit_reg_addr);
 	if (err)
 		return err;
-	apll_reinit_mask = IDTFC3_FW_FIELD(fw_ver, VFC3A, APLL_REINIT);
+	apll_reinit_mask = IDTFC3_FW_FIELD(devid, VFC3A, APLL_REINIT);
 
 	/* Toggle TDC_DAC_RECAL_REQ:
 		(1) set tdc_en to 1
 		(2) set tdc_dac_recal_req to 0
 		(3) set tdc_dac_recal_req to 1 */
-	if (fw_ver == VFC3A) {
+	if (devid == VFC3A) {
 		val = TDC_EN;
 		err = regmap_bulk_write(rsmu->regmap, TDC_ENABLE_CTRL,
 					&val, sizeof(val));
@@ -119,125 +235,10 @@ static int hw_calibrate(struct rsmu_cdev *rsmu)
 		return err;
 	mdelay(10);
 
-	return err;	
+	return hw_init(rsmu);	
 }
 
-static int get_losmon_sts_reg_offset(enum fw_version fw_ver, u8 clock_index, u16 *losmon_sts_reg_offset)
-{
-	switch (clock_index) {
-	case 0:
-		*losmon_sts_reg_offset = IDTFC3_FW_REG(fw_ver, VFC3A, LOSMON_STS_0);
-		break;
-	case 1:
-		*losmon_sts_reg_offset = IDTFC3_FW_REG(fw_ver, VFC3A, LOSMON_STS_1);
-		break;
-	case 2:
-		*losmon_sts_reg_offset = IDTFC3_FW_REG(fw_ver, VFC3A, LOSMON_STS_2);
-		break;
-	case 3:
-		*losmon_sts_reg_offset = IDTFC3_FW_REG(fw_ver, VFC3A, LOSMON_STS_3);
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-static int get_freqmon_sts_reg_offset(enum fw_version fw_ver, u8 clock_index, u16 *freqmon_sts_reg_offset)
-{
-	switch (clock_index) {
-	case 0:
-		*freqmon_sts_reg_offset = IDTFC3_FW_REG(fw_ver, VFC3A, FREQMON_STS_0);
-		break;
-	case 1:
-		*freqmon_sts_reg_offset = IDTFC3_FW_REG(fw_ver, VFC3A, FREQMON_STS_1);
-		break;
-	case 2:
-		*freqmon_sts_reg_offset = IDTFC3_FW_REG(fw_ver, VFC3A, FREQMON_STS_2);
-		break;
-	case 3:
-		*freqmon_sts_reg_offset = IDTFC3_FW_REG(fw_ver, VFC3A, FREQMON_STS_3);
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-static int rsmu_fc3_get_dpll_state(struct rsmu_cdev *rsmu,
-				   u8 dpll,
-				   u8 *state)
-{
-	u16 reg_addr;
-	u8 reg;
-	int err;
-
-	if (dpll > MAX_DPLL_INDEX) {
-		return -EINVAL;
-	}
-
-	reg_addr = IDTFC3_FW_REG(rsmu->fw_version, VFC3A, DPLL_STS);
-	if (rsmu->fw_version == VFC3A) {
-		(void)dpll;
-	} else {
-		reg_addr += dpll * 0x100;
-	}
-
-	err = regmap_bulk_read(rsmu->regmap, reg_addr, &reg, sizeof(reg));
-	if (err)
-		return err;
-
-	reg = (reg & DPLL_STATE_STS_MASK) >> DPLL_STATE_STS_SHIFT;
-
-	switch (reg) {
-	case DPLL_STATE_FREERUN:
-	case DPLL_STATE_WRITE_FREQUENCY:
-		*state = E_SRVLOUNQUALIFIEDSTATE;
-		break;
-	case DPLL_STATE_ACQUIRE:
-	case DPLL_STATE_HITLESS_SWITCH:
-		*state = E_SRVLOLOCKACQSTATE;
-		break;
-	case DPLL_STATE_LOCKED:
-		*state = E_SRVLOTIMELOCKEDSTATE;
-		break;
-	case DPLL_STATE_HOLDOVER:
-		*state = E_SRVLOHOLDOVERINSPECSTATE;
-		break;
-	default:
-		*state = E_SRVLOSTATEINVALID;
-		break;
-	}
-
-	return 0;
-}
-
-static int rsmu_fc3_get_fw_version(struct rsmu_cdev *rsmu)
-{
-	int err;
-	u16 device_id;
-
-	err = read_device_id(rsmu, &device_id);
-	if (err) {
-		rsmu->fw_version = V_DEFAULT;
-		return err;
-	}
-
-	if (device_id & DEVICE_ID_MASK) {
-		rsmu->fw_version = VFC3W;
-		dev_info(rsmu->dev, "identified FC3W device\n");
-	} else {
-		rsmu->fw_version = VFC3A;
-		dev_info(rsmu->dev, "identified FC3A device\n");
-	}
-
-	return 0;
-}
-
-static int rsmu_fc3_load_firmware(struct rsmu_cdev *rsmu,
-				  char fwname[FW_NAME_LEN_MAX])
+static int load_firmware(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 {
 	char fname[128] = FW_FILENAME;
 	const struct firmware *fw;
@@ -275,7 +276,7 @@ static int rsmu_fc3_load_firmware(struct rsmu_cdev *rsmu,
 
 			rec++;
 
-			err = check_and_set_masks(rsmu, addr, val);
+			err = idtfc3_set_hw_param(HW_PARAM(rsmu), addr, val);
 		}
 
 		if (err != -EINVAL) {
@@ -293,9 +294,184 @@ static int rsmu_fc3_load_firmware(struct rsmu_cdev *rsmu,
 			goto out;
 	}
 
+	err = hw_calibrate(rsmu);
 out:
 	release_firmware(fw);
-	return hw_calibrate(rsmu);
+	return err;
+}
+
+static int get_losmon_sts_reg_offset(u8 devid, u8 clock_index, u16 *losmon_sts_reg_offset)
+{
+	switch (clock_index) {
+	case 0:
+		*losmon_sts_reg_offset = IDTFC3_FW_REG(devid, VFC3A, LOSMON_STS_0);
+		break;
+	case 1:
+		*losmon_sts_reg_offset = IDTFC3_FW_REG(devid, VFC3A, LOSMON_STS_1);
+		break;
+	case 2:
+		*losmon_sts_reg_offset = IDTFC3_FW_REG(devid, VFC3A, LOSMON_STS_2);
+		break;
+	case 3:
+		*losmon_sts_reg_offset = IDTFC3_FW_REG(devid, VFC3A, LOSMON_STS_3);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int get_freqmon_sts_reg_offset(u8 devid, u8 clock_index, u16 *freqmon_sts_reg_offset)
+{
+	switch (clock_index) {
+	case 0:
+		*freqmon_sts_reg_offset = IDTFC3_FW_REG(devid, VFC3A, FREQMON_STS_0);
+		break;
+	case 1:
+		*freqmon_sts_reg_offset = IDTFC3_FW_REG(devid, VFC3A, FREQMON_STS_1);
+		break;
+	case 2:
+		*freqmon_sts_reg_offset = IDTFC3_FW_REG(devid, VFC3A, FREQMON_STS_2);
+		break;
+	case 3:
+		*freqmon_sts_reg_offset = IDTFC3_FW_REG(devid, VFC3A, FREQMON_STS_3);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static inline s64 tdc_meas2offset(struct rsmu_cdev *rsmu, u64 meas_read)
+{
+	s64 coarse, fine;
+
+	fine = sign_extend64(FIELD_GET(FINE_MEAS_MASK, meas_read), 12);
+	coarse = sign_extend64(FIELD_GET(COARSE_MEAS_MASK, meas_read), (39 - 13));
+
+	return div64_s64(coarse * NSEC_PER_SEC, TIME_REF(rsmu)) + div64_s64(
+			 fine * NSEC_PER_SEC, TDC_APLL(rsmu) * 62LL);	
+}
+
+static inline int get_tdc_meas(struct rsmu_cdev *rsmu, s64 *offset_ns)
+{
+	u8 buf[9];
+	u8 val;
+	int err;
+
+	/* Waiting for measurement to be done */
+	err = read_poll_timeout_atomic(regmap_bulk_read, err, !(val & FIFO_EMPTY),
+				       0, 5 * USEC_PER_SEC, false, rsmu->regmap,
+				       TDC_FIFO_STS, &val, sizeof(val));
+	if(err) {
+		dev_err(rsmu->dev, "TDC measurement timeout !!!");
+		return err;
+	}
+
+	err = regmap_bulk_read(rsmu->regmap, TDC_FIFO_READ_REQ,
+			       &buf, sizeof(buf));
+	if (err)
+		return err;
+
+	*offset_ns = tdc_meas2offset(rsmu, get_unaligned_le64(&buf[1]));
+
+	return 0;
+}
+
+static inline int check_tdc_fifo_overrun(struct rsmu_cdev *rsmu)
+{
+	u8 val;
+	int err;
+
+	/* Check if FIFO is overrun */
+	err = regmap_bulk_read(rsmu->regmap, TDC_FIFO_STS, &val, sizeof(val));
+	if (err)
+		return err;
+
+	if (!(val & FIFO_FULL))
+		return 0;
+
+	dev_warn(rsmu->dev, "TDC FIFO overrun !!!");
+
+	MEAS_MODE(rsmu) = MEAS_MODE_INVALID;
+	err = set_tdc_meas_mode(rsmu, CONTINUOUS);
+	if (err)
+		return err;
+
+	return 0;
+}
+
+static int get_tdc_meas_one_shot(struct rsmu_cdev *rsmu, s64 *offset_ns)
+{
+	u8 val = TDC_MEAS_EN | TDC_MEAS_START;
+	int err;
+
+	err = regmap_bulk_write(rsmu->regmap, TIME_CLOCK_MEAS_CTRL, &val, sizeof(val));
+	if (err)
+		return err;
+
+	return get_tdc_meas(rsmu, offset_ns);
+}
+
+static int get_tdc_meas_continuous(struct rsmu_cdev *rsmu, s64 *offset_ns)
+{
+	int err;
+
+	err = check_tdc_fifo_overrun(rsmu);
+	if (err)
+		return err;
+
+	return get_tdc_meas(rsmu, offset_ns);
+}
+
+static int rsmu_fc3_get_dpll_state(struct rsmu_cdev *rsmu,
+				   u8 dpll,
+				   u8 *state)
+{
+	u16 reg_addr;
+	u8 reg;
+	int err;
+
+	if (dpll > MAX_DPLL_INDEX) {
+		return -EINVAL;
+	}
+
+	reg_addr = IDTFC3_FW_REG(DEVID(rsmu), VFC3A, DPLL_STS);
+	if (DEVID(rsmu) == VFC3A) {
+		(void)dpll;
+	} else {
+		reg_addr += dpll * 0x100;
+	}
+
+	err = regmap_bulk_read(rsmu->regmap, reg_addr, &reg, sizeof(reg));
+	if (err)
+		return err;
+
+	reg = (reg & DPLL_STATE_STS_MASK) >> DPLL_STATE_STS_SHIFT;
+
+	switch (reg) {
+	case DPLL_STATE_FREERUN:
+	case DPLL_STATE_WRITE_FREQUENCY:
+		*state = E_SRVLOUNQUALIFIEDSTATE;
+		break;
+	case DPLL_STATE_ACQUIRE:
+	case DPLL_STATE_HITLESS_SWITCH:
+		*state = E_SRVLOLOCKACQSTATE;
+		break;
+	case DPLL_STATE_LOCKED:
+		*state = E_SRVLOTIMELOCKEDSTATE;
+		break;
+	case DPLL_STATE_HOLDOVER:
+		*state = E_SRVLOHOLDOVERINSPECSTATE;
+		break;
+	default:
+		*state = E_SRVLOSTATEINVALID;
+		break;
+	}
+
+	return 0;
 }
 
 static int rsmu_fc3_get_clock_index(struct rsmu_cdev *rsmu,
@@ -311,8 +487,8 @@ static int rsmu_fc3_get_clock_index(struct rsmu_cdev *rsmu,
 		return -EINVAL;
 	}
 
-	reg_addr = IDTFC3_FW_REG(rsmu->fw_version, VFC3A, DPLL_STS);
-	if (rsmu->fw_version == VFC3A) {
+	reg_addr = IDTFC3_FW_REG(DEVID(rsmu), VFC3A, DPLL_STS);
+	if (DEVID(rsmu) == VFC3A) {
 		(void)dpll;
 	} else {
 		reg_addr += dpll * 0x100;
@@ -349,7 +525,7 @@ static int rsmu_fc3_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 num
 	}
 
 	reg_addr = DPLL_REF_PRIORITY_CNFG;
-	if (rsmu->fw_version == VFC3A) {
+	if (DEVID(rsmu) == VFC3A) {
 		(void)dpll;
 	} else {
 		reg_addr += dpll * 0x100;
@@ -415,11 +591,11 @@ static int rsmu_fc3_get_reference_monitor_status(struct rsmu_cdev *rsmu, u8 cloc
 	if (clock_index > MAX_REFERENCE_INDEX)
 		return -EINVAL;
 
-	err = get_losmon_sts_reg_offset(rsmu->fw_version, clock_index, &losmon_sts_reg_addr);
+	err = get_losmon_sts_reg_offset(DEVID(rsmu), clock_index, &losmon_sts_reg_addr);
 	if (err)
 		return err;
 
-	err = get_freqmon_sts_reg_offset(rsmu->fw_version, clock_index, &freqmon_sts_reg_addr);
+	err = get_freqmon_sts_reg_offset(DEVID(rsmu), clock_index, &freqmon_sts_reg_addr);
 	if (err)
 		return err;
 
@@ -443,17 +619,64 @@ static int rsmu_fc3_get_reference_monitor_status(struct rsmu_cdev *rsmu, u8 cloc
 	return err;
 }
 
+static int rsmu_fc3_get_tdc_meas(struct rsmu_cdev *rsmu, bool continuous, s64 *offset_ns)
+{	
+	int err;
+	u8 mode = ONE_SHOT;
+
+	if (DEVID(rsmu) == VFC3A)
+		return -ENOTSUPP;
+
+	if(continuous)
+		mode = CONTINUOUS;
+
+	err = set_tdc_meas_mode(rsmu, mode);
+	if (err)
+		return err;
+
+	if(continuous)
+		err = get_tdc_meas_continuous(rsmu, offset_ns);
+	else
+		err = get_tdc_meas_one_shot(rsmu, offset_ns);
+
+	return err;
+}
+
+static int rsmu_fc3_init(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
+{
+	struct rsmufc3 *ddata;
+	int err;
+
+	ddata = devm_kzalloc(rsmu->dev, sizeof(*ddata), GFP_KERNEL);
+	if (!ddata)
+		return -ENOMEM;
+	rsmu->ddata = ddata;
+
+	err = read_device_id(rsmu);
+	if (err) {
+		dev_err(rsmu->dev, "reading device id failed with %d", err);
+		return err;			
+	}
+
+	err = load_firmware(rsmu, fwname);
+	if (err) {
+		dev_warn(rsmu->dev, "loading firmware failed with %d", err);			
+	}
+
+	return 0;
+}
+
 struct rsmu_ops fc3_ops = {
 	.type = RSMU_FC3,
+	.device_init = rsmu_fc3_init,
 	.set_combomode = NULL,
 	.get_dpll_state = rsmu_fc3_get_dpll_state,
 	.get_dpll_ffo = NULL,
 	.set_holdover_mode = NULL,
 	.set_output_tdc_go = NULL,
-	.get_fw_version = rsmu_fc3_get_fw_version,
-	.load_firmware = rsmu_fc3_load_firmware,
 	.get_clock_index = rsmu_fc3_get_clock_index,
 	.set_clock_priorities = rsmu_fc3_set_clock_priorities,
-	.get_reference_monitor_status = rsmu_fc3_get_reference_monitor_status
+	.get_reference_monitor_status = rsmu_fc3_get_reference_monitor_status,
+	.get_tdc_meas = rsmu_fc3_get_tdc_meas
 };
 

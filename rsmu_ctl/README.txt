@@ -93,4 +93,46 @@ rsmu_ctl[89260.382]: Opening /dev/rsmu1 ...
 2010c030: 35 06 01 40 47 00 0f 01 01 00 00 00 08 08 01 00
 2010c040: 5b 01 00 5b 55 00 50 00 00 00 00 00 00 00 00 00
 
+#
+# Lock time_sync to 1Hz external signal
+#
+modprobe ptp_fc3 firmware=rsmufc3.bin
+modprobe rsmu
+rsmu_ctl /dev/rsmu0 time_sync_ext linuxptp/configs/fc3_wp.cfg 1
+
+#
+# Lock time_sync to 0.5Hz external signal
+#
+modprobe ptp_fc3 firmware=rsmufc3.timesync_0.5Hz.bin
+modprobe rsmu firmware=rsmufc3.timesync_0.5Hz.bin
+rsmu_ctl /dev/rsmu0 time_sync_ext linuxptp/configs/fc3_wp.cfg 2
+
+./rsmu_ctl /dev/rsmu0 time_sync_ext fc3_wp.cfg 2
+rsmu_ctl[14957.119]: Opening /dev/rsmu0 ...
+rsmu_ctl[14960.198]: offset -432770200 s0 freq      -0
+rsmu_ctl[14962.196]: offset -432770256 s1 freq     -28
+rsmu_ctl[14967.764]: offset        -54 s2 freq     -55
+rsmu_ctl[14971.763]: offset          0 s2 freq     -36
+rsmu_ctl[14975.763]: offset         73 s2 freq      +0
+rsmu_ctl[14979.764]: offset         25 s2 freq     -13
+rsmu_ctl[14981.763]: offset       -100 s2 freq     -71
+rsmu_ctl[14983.763]: offset          0 s2 freq     -36
+rsmu_ctl[14987.765]: offset          0 s2 freq     -36
+rsmu_ctl[14991.764]: offset         33 s2 freq     -20
+rsmu_ctl[14995.763]: offset          0 s2 freq     -31
+rsmu_ctl[14997.765]: offset          0 s2 freq     -31
+rsmu_ctl[14999.765]: offset          0 s2 freq     -31
+rsmu_ctl[15001.763]: offset          0 s2 freq     -31
+rsmu_ctl[15003.764]: offset          0 s2 freq     -31
+rsmu_ctl[15005.763]: offset          0 s2 freq     -31
+rsmu_ctl[15007.763]: offset          0 s2 freq     -31
+rsmu_ctl[15009.763]: offset          0 s2 freq     -31
+rsmu_ctl[15011.765]: offset          0 s2 freq     -31
+rsmu_ctl[15013.763]: offset          0 s2 freq     -31
+rsmu_ctl[15015.763]: offset          0 s2 freq     -31
+rsmu_ctl[15017.764]: offset          0 s2 freq     -31
+rsmu_ctl[15019.765]: offset          0 s3 freq     -31
+rsmu_ctl[15021.764]: offset          0 s3 freq     -31
+rsmu_ctl[15023.763]: offset          0 s3 freq     -31
+
 

@@ -251,6 +251,29 @@ rsmu_get_reference_monitor_status(struct rsmu_cdev *rsmu, void __user *arg)
 	return err;
 }
 
+static int
+rsmu_get_tdc_meas(struct rsmu_cdev *rsmu, void __user *arg)
+{
+	struct rsmu_ops *ops = rsmu->ops;
+	struct rsmu_get_tdc_meas meas;
+	int err;
+
+	if (ops->get_tdc_meas == NULL)
+		return -ENOTSUPP;
+
+	if (copy_from_user(&meas, arg, sizeof(meas)))
+		return -EFAULT;
+
+	mutex_lock(rsmu->lock);
+	err = ops->get_tdc_meas(rsmu, meas.continuous, &meas.offset);
+	mutex_unlock(rsmu->lock);
+
+	if (copy_to_user(arg, &meas, sizeof(meas)))
+		return -EFAULT;
+
+	return err;
+}
+
 static struct rsmu_cdev *file2rsmu(struct file *file)
 {
 	return container_of(file->private_data, struct rsmu_cdev, miscdev);
@@ -287,6 +310,9 @@ rsmu_ioctl(struct file *fptr, unsigned int cmd, unsigned long data)
 		break;
 	case RSMU_GET_REFERENCE_MONITOR_STATUS:
 		err = rsmu_get_reference_monitor_status(rsmu, arg);
+		break;
+	case RSMU_GET_TDC_MEAS:
+		err = rsmu_get_tdc_meas(rsmu, arg);
 		break;
 	case RSMU_REG_READ:
 		err = rsmu_reg_read(rsmu, arg);
@@ -364,19 +390,12 @@ rsmu_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	if (rsmu->ops->get_fw_version) {
-		err = rsmu->ops->get_fw_version(rsmu);
+	if (rsmu->ops->device_init) {
+		err = rsmu->ops->device_init(rsmu, firmware);
 		if (err) {
-			dev_err(rsmu->dev, "Unable to get firmware version\n");
+			dev_err(rsmu->dev, "Device initialization failed\n");
 			ida_simple_remove(&rsmu_cdev_map, rsmu->index);
 			return err;			
-		}
-	}
-
-	if (rsmu->ops->load_firmware) {
-		err = rsmu->ops->load_firmware(rsmu, firmware);
-		if (err) {
-			dev_warn(rsmu->dev, "loading firmware failed with %d", err);			
 		}
 	}
 
