@@ -569,7 +569,7 @@ static int rsmu_fc3_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 num
 
 	put_unaligned_le16(reg, buf);
 
-	err = regmap_bulk_write(rsmu->regmap, DPLL_REF_PRIORITY_CNFG, &buf, sizeof(buf));
+	err = regmap_bulk_write(rsmu->regmap, reg_addr, &buf, sizeof(buf));
 
 	if (err) {
 		dev_err(rsmu->dev, "err\n");
