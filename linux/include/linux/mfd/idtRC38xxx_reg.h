@@ -77,6 +77,23 @@ enum lpf_mode {
 #define LPF_WR_FREQ_CTRL	(0xab0)
 #define LPF_WR_FREQ_CTRL_VFC3A	(0x730)
 
+#define TIME_CLOCK_TDC_FANOUT_CNFG	(0xB00)
+#define TIME_SYNC_TO_TDC_EN	BIT(0)
+#define SIG1_MUX_SEL_MASK	GENMASK(7,4)
+#define SIG2_MUX_SEL_MASK	GENMASK(11,8)
+enum tdc_mux_sel {
+	REF0 = 0,
+	REF1 = 1,
+	REF2 = 2,
+	REF3 = 3,
+	REF_CLK5 = 4,
+	REF_CLK6 = 5,
+	DPLL_FB_TO_TDC = 6,
+	DPLL_FB_DIVIDED_TO_TDC = 7,
+	TIME_CLK_DIVIDED = 8,
+	TIME_SYNC = 9,
+};
+
 #define TIME_CLOCK_MEAS_CNFG	(0xB04)
 #define TDC_MEAS_MODE	BIT(0)
 enum tdc_meas_mode {
