@@ -72,6 +72,13 @@ enum lpf_mode {
 #define LPF_CTRL_VFC3A	(0x718)
 #define LPF_EN		BIT(0)
 
+#define LPF_BW_CNFG	(0xa81)
+#define LPF_BW_SHIFT	GENMASK(7, 3)
+#define LPF_BW_MULT		GENMASK(2, 0)
+#define LPF_BW_SHIFT_DEFAULT	(0xb)
+#define LPF_BW_MULT_DEFAULT		(0x0)
+#define LPF_BW_SHIFT_1PPS		(0x5)
+
 #define LPF_WR_PHASE_CTRL	(0xaa8)
 #define LPF_WR_PHASE_CTRL_VFC3A	(0x728)
 #define LPF_WR_FREQ_CTRL	(0xab0)
@@ -79,8 +86,8 @@ enum lpf_mode {
 
 #define TIME_CLOCK_TDC_FANOUT_CNFG	(0xB00)
 #define TIME_SYNC_TO_TDC_EN	BIT(0)
-#define SIG1_MUX_SEL_MASK	GENMASK(7,4)
-#define SIG2_MUX_SEL_MASK	GENMASK(11,8)
+#define SIG1_MUX_SEL_MASK	GENMASK(7, 4)
+#define SIG2_MUX_SEL_MASK	GENMASK(11, 8)
 enum tdc_mux_sel {
 	REF0 = 0,
 	REF1 = 1,
