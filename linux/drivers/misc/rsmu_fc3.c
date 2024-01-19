@@ -89,7 +89,7 @@ static int rsmu_get_tdc_apll_freq(struct rsmu_cdev *rsmu)
 	tdc_fb_div_int &= TDC_FB_DIV_INT_MASK;
 	tdc_ref_div &= TDC_REF_DIV_CONFIG_MASK;
 
-	TDC_APLL(rsmu) = div_u64(HW_PARAM(rsmu)->xtal_freq * 
+	TDC_APLL(rsmu) = div_u64(HW_PARAM(rsmu)->tdc_ref_freq * 
 				 (u64)tdc_fb_div_int, 1 << tdc_ref_div);
 
 	return 0;
@@ -276,7 +276,10 @@ static int load_firmware(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 
 			rec++;
 
-			err = idtfc3_set_hw_param(HW_PARAM(rsmu), addr, val);
+			err = idtfc3_set_hw_param(HW_PARAM(rsmu), addr,
+									  get_unaligned_be32((void *)rec));
+			if (err == 0)
+				rec++;
 		}
 
 		if (err != -EINVAL) {
