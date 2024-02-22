@@ -175,9 +175,9 @@ static int hw_calibrate(struct rsmu_cdev *rsmu)
 {
 	int err = 0;
 	u8 val;
-	u8 devid = DEVID(rsmu);
 	u16 apll_reinit_reg_addr;
 	u8 apll_reinit_mask;
+	u8 devid = DEVID(rsmu);
 
 	err = get_apll_reinit_reg_offset(devid, &apll_reinit_reg_addr);
 	if (err)
@@ -300,9 +300,30 @@ out:
 	return err;
 }
 
-static int get_losmon_sts_reg_offset(u8 devid, u8 clock_index, u16 *losmon_sts_reg_offset)
+static u8 clock_index_to_ref_index(struct rsmu_cdev *rsmu, u8 clock_index)
 {
-	switch (clock_index) {
+	u16 reg_addr;
+	u32 ref_sel_cnfg_reg;
+	u8 ref_index;
+	int err;
+	u8 devid = DEVID(rsmu);
+
+	reg_addr = IDTFC3_FW_REG(devid, VFC3A, REF_SEL_CNFG);
+	err = regmap_bulk_read(rsmu->regmap, reg_addr, &ref_sel_cnfg_reg, sizeof(ref_sel_cnfg_reg));
+	if (err)
+		return err;
+
+	for (ref_index = 0; ref_index <= MAX_REF_INDEX; ref_index++) {
+		if (clock_index == ((ref_sel_cnfg_reg >> (REF_MUX_SEL_SHIFT * ref_index)) & REF_MUX_SEL_MASK))
+			return ref_index;
+	}
+
+	return ref_index;
+}
+
+static int get_losmon_sts_reg_offset(u8 devid, u8 ref_index, u16 *losmon_sts_reg_offset)
+{
+	switch (ref_index) {
 	case 0:
 		*losmon_sts_reg_offset = IDTFC3_FW_REG(devid, VFC3A, LOSMON_STS_0);
 		break;
@@ -322,9 +343,9 @@ static int get_losmon_sts_reg_offset(u8 devid, u8 clock_index, u16 *losmon_sts_r
 	return 0;
 }
 
-static int get_freqmon_sts_reg_offset(u8 devid, u8 clock_index, u16 *freqmon_sts_reg_offset)
+static int get_freqmon_sts_reg_offset(u8 devid, u8 ref_index, u16 *freqmon_sts_reg_offset)
 {
-	switch (clock_index) {
+	switch (ref_index) {
 	case 0:
 		*freqmon_sts_reg_offset = IDTFC3_FW_REG(devid, VFC3A, FREQMON_STS_0);
 		break;
@@ -433,13 +454,14 @@ static int rsmu_fc3_get_dpll_state(struct rsmu_cdev *rsmu,
 	u16 reg_addr;
 	u8 reg;
 	int err;
+	u8 devid = DEVID(rsmu);
 
-	if (dpll > MAX_DPLL_INDEX) {
+	if (dpll > IDTFC3_FW_MACRO(devid, VFC3A, MAX_DPLL_INDEX)) {
 		return -EINVAL;
 	}
 
-	reg_addr = IDTFC3_FW_REG(DEVID(rsmu), VFC3A, DPLL_STS);
-	if (DEVID(rsmu) == VFC3A) {
+	reg_addr = IDTFC3_FW_REG(devid, VFC3A, DPLL_STS);
+	if (devid == VFC3A) {
 		(void)dpll;
 	} else {
 		reg_addr += dpll * 0x100;
@@ -479,31 +501,39 @@ static int rsmu_fc3_get_clock_index(struct rsmu_cdev *rsmu,
 				    s8 *clock_index)
 {
 	u16 reg_addr;
-	u8 reg;
+	u8 dpll_sts_reg;
+	u32 ref_sel_cnfg_reg;
 	enum dpll_state dpll_state_sts;
+	u8 ref_index;
 	int err;
+	u8 devid = DEVID(rsmu);
 
-	if (dpll > MAX_DPLL_INDEX) {
+	*clock_index = -1;
+
+	if (dpll > IDTFC3_FW_MACRO(devid, VFC3A, MAX_DPLL_INDEX))
 		return -EINVAL;
-	}
 
-	reg_addr = IDTFC3_FW_REG(DEVID(rsmu), VFC3A, DPLL_STS);
-	if (DEVID(rsmu) == VFC3A) {
+	reg_addr = IDTFC3_FW_REG(devid, VFC3A, DPLL_STS);
+	if (devid == VFC3A) {
 		(void)dpll;
 	} else {
 		reg_addr += dpll * 0x100;
 	}
 
-	err = regmap_bulk_read(rsmu->regmap, reg_addr, &reg, sizeof(reg));
+	err = regmap_bulk_read(rsmu->regmap, reg_addr, &dpll_sts_reg, sizeof(dpll_sts_reg));
 	if (err)
 		return err;
 
-	dpll_state_sts = (enum dpll_state)((reg & DPLL_STATE_STS_MASK) >> DPLL_STATE_STS_SHIFT);
+	dpll_state_sts = (enum dpll_state)((dpll_sts_reg & DPLL_STATE_STS_MASK) >> DPLL_STATE_STS_SHIFT);
 	if ((dpll_state_sts == DPLL_STATE_LOCKED) || (dpll_state_sts == DPLL_STATE_ACQUIRE) || (dpll_state_sts == DPLL_STATE_HITLESS_SWITCH)) {
-		*clock_index = (reg & DPLL_REF_SEL_STS_MASK) >> DPLL_REF_SEL_STS_SHIFT;
-	}
-	else {
-		*clock_index = -1;
+		ref_index = (dpll_sts_reg & DPLL_REF_SEL_STS_MASK) >> DPLL_REF_SEL_STS_SHIFT;
+
+		reg_addr = IDTFC3_FW_REG(devid, VFC3A, REF_SEL_CNFG);
+		err = regmap_bulk_read(rsmu->regmap, reg_addr, &ref_sel_cnfg_reg, sizeof(ref_sel_cnfg_reg));
+		if (err)
+			return err;
+
+		*clock_index = (ref_sel_cnfg_reg >> (REF_MUX_SEL_SHIFT * ref_index)) & REF_MUX_SEL_MASK;
 	}
 
 	return err;
@@ -515,17 +545,19 @@ static int rsmu_fc3_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 num
 	int priority_index;
 	u16 reg = 0;
 	u8 clock_index;
+	u8 ref_index;
 	u8 priority;
 	u8 buf[2] = {0};
 	int err;
 	u16 reg_addr;
+	u8 devid = DEVID(rsmu);
 
-	if (dpll > MAX_DPLL_INDEX) {
+	if (dpll > IDTFC3_FW_MACRO(devid, VFC3A, MAX_DPLL_INDEX)) {
 		return -EINVAL;
 	}
 
 	reg_addr = DPLL_REF_PRIORITY_CNFG;
-	if (DEVID(rsmu) == VFC3A) {
+	if (devid == VFC3A) {
 		(void)dpll;
 	} else {
 		reg_addr += dpll * 0x100;
@@ -542,12 +574,13 @@ static int rsmu_fc3_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 num
 		clock_index = priority_entry->clock_index;
 		priority = priority_entry->priority;
 
-		if ((clock_index > MAX_REFERENCE_INDEX) || (priority > MAX_NUM_REF_PRIORITY))
+		if ((clock_index > MAX_INPUT_CLOCK_INDEX) || (priority >= MAX_NUM_REF_PRIORITY))
 			return -EINVAL;
 
-		/* Set clock priority disable bit to zero to enable it */
+		ref_index = clock_index_to_ref_index(rsmu, clock_index);
 
-		switch (clock_index) {
+		/* Set clock priority disable bit to zero to enable it */
+		switch (ref_index) {
 		case 0:
 			reg = ((reg & (~DPLL_REF0_PRIORITY_ENABLE_AND_SET_MASK)) | (priority << DPLL_REF0_PRIORITY_SHIFT));
 			break;
@@ -581,21 +614,27 @@ static int rsmu_fc3_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 num
 static int rsmu_fc3_get_reference_monitor_status(struct rsmu_cdev *rsmu, u8 clock_index,
 						 struct rsmu_reference_monitor_status_alarms *alarms)
 {
+	u8 ref_index;
 	u16 losmon_sts_reg_addr;
 	u16 freqmon_sts_reg_addr;
 	u8 los_reg;
 	u8 buf[4] = {0};
 	u32 freq_reg;
 	int err;
+	u8 devid = DEVID(rsmu);
 
-	if (clock_index > MAX_REFERENCE_INDEX)
+	if (clock_index > MAX_INPUT_CLOCK_INDEX)
 		return -EINVAL;
 
-	err = get_losmon_sts_reg_offset(DEVID(rsmu), clock_index, &losmon_sts_reg_addr);
+	ref_index = clock_index_to_ref_index(rsmu, clock_index);
+	if (ref_index > MAX_REF_INDEX)
+		return -EINVAL;
+
+	err = get_losmon_sts_reg_offset(devid, ref_index, &losmon_sts_reg_addr);
 	if (err)
 		return err;
 
-	err = get_freqmon_sts_reg_offset(DEVID(rsmu), clock_index, &freqmon_sts_reg_addr);
+	err = get_freqmon_sts_reg_offset(devid, ref_index, &freqmon_sts_reg_addr);
 	if (err)
 		return err;
 
