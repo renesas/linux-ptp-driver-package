@@ -129,11 +129,18 @@ enum tdc_meas_mode {
 #define TDC_FIFO_EVENT		(0xB39)
 #define FIFO_OVERRUN		BIT(1)
 
-/* DPLL */
-#define MAX_REFERENCE_INDEX	(3)
+/* INPUTS */
+#define MAX_INPUT_CLOCK_INDEX	(7)
 #define MAX_NUM_REF_PRIORITY	(4)
+#define MAX_REF_INDEX		(3)
+#define REF_SEL_CNFG		(0x410)
+#define REF_SEL_CNFG_VFC3A	(0x80)
+#define REF_MUX_SEL_MASK	(0x7)
+#define REF_MUX_SEL_SHIFT	(3)
 
-#define MAX_DPLL_INDEX	(2)
+/* DPLL */
+#define MAX_DPLL_INDEX		(2)
+#define MAX_DPLL_INDEX_VFC3A	(0)
 
 #define DPLL_STS		(0x580)
 #define DPLL_STS_VFC3A		(0x571)
@@ -194,6 +201,7 @@ enum dpll_state {
  */
 #define IDTFC3_FW_REG(FW, VER, REG)	(((FW) < (VER)) ? (REG) : (REG##_##VER))
 #define IDTFC3_FW_FIELD(FW, VER, FIELD)	(((FW) < (VER)) ? (FIELD) : (FIELD##_##VER))
+#define IDTFC3_FW_MACRO(FW, VER, MACRO)	(((FW) < (VER)) ? (MACRO) : (MACRO##_##VER))
 enum fw_version {
 	V_DEFAULT = 0,
 	VFC3W     = 1,
