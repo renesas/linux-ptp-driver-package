@@ -42,7 +42,7 @@ static int _idtcm_adjfine(struct idtcm_channel *channel, long scaled_ppm);
 
 static inline int idtcm_read(struct idtcm *idtcm,
 			     u32 module,
-			     u16 regaddr,
+			     u32 regaddr,
 			     u8 *buf,
 			     u16 count)
 {
@@ -51,7 +51,7 @@ static inline int idtcm_read(struct idtcm *idtcm,
 
 static inline int idtcm_write(struct idtcm *idtcm,
 			      u32 module,
-			      u16 regaddr,
+			      u32 regaddr,
 			      u8 *buf,
 			      u16 count)
 {
@@ -554,11 +554,11 @@ static int _sync_pll_output(struct idtcm *idtcm,
 	val = SYNCTRL1_MASTER_SYNC_RST;
 
 	/* Place master sync in reset */
-	err = idtcm_write(idtcm, 0, sync_ctrl1, &val, sizeof(val));
+	err = idtcm_write(idtcm, sync_ctrl1, 0, &val, sizeof(val));
 	if (err)
 		return err;
 
-	err = idtcm_write(idtcm, 0, sync_ctrl0, &sync_src, sizeof(sync_src));
+	err = idtcm_write(idtcm, sync_ctrl0, 0, &sync_src, sizeof(sync_src));
 	if (err)
 		return err;
 
@@ -571,7 +571,7 @@ static int _sync_pll_output(struct idtcm *idtcm,
 	if (qn_plus_1)
 		val |= SYNCTRL1_Q1_DIV_SYNC_TRIG;
 
-	err = idtcm_write(idtcm, 0, sync_ctrl1, &val, sizeof(val));
+	err = idtcm_write(idtcm, sync_ctrl1, 0, &val, sizeof(val));
 	if (err)
 		return err;
 
@@ -621,7 +621,7 @@ static int _sync_pll_output(struct idtcm *idtcm,
 
 	/* Place master sync out of reset */
 	val &= ~(SYNCTRL1_MASTER_SYNC_RST);
-	err = idtcm_write(idtcm, 0, sync_ctrl1, &val, sizeof(val));
+	err = idtcm_write(idtcm, sync_ctrl1, 0, &val, sizeof(val));
 
 	return err;
 }
@@ -1254,7 +1254,7 @@ static void display_pll_and_masks(struct idtcm *idtcm)
 static int idtcm_load_firmware(struct idtcm *idtcm,
 			       struct device *dev)
 {
-	u16 scratch = IDTCM_FW_REG(idtcm->fw_ver, V520, SCRATCH);
+	u16 scratch = SCSR_ADDR(IDTCM_FW_REG(idtcm->fw_ver, V520, SCRATCH));
 	char fname[128] = FW_FILENAME;
 	const struct firmware *fw;
 	struct idtcm_fwrc *rec;
@@ -1341,7 +1341,7 @@ static int idtcm_output_enable(struct idtcm_channel *channel,
 		return base;
 	}
 
-	err = idtcm_read(idtcm, (u16)base, OUT_CTRL_1, &val, sizeof(val));
+	err = idtcm_read(idtcm, (u32)base, OUT_CTRL_1, &val, sizeof(val));
 	if (err)
 		return err;
 
@@ -1350,7 +1350,7 @@ static int idtcm_output_enable(struct idtcm_channel *channel,
 	else
 		val &= ~SQUELCH_DISABLE;
 
-	return idtcm_write(idtcm, (u16)base, OUT_CTRL_1, &val, sizeof(val));
+	return idtcm_write(idtcm, (u32)base, OUT_CTRL_1, &val, sizeof(val));
 }
 
 static int idtcm_perout_enable(struct idtcm_channel *channel,
@@ -1719,11 +1719,11 @@ static int initialize_dco_operating_mode(struct idtcm_channel *channel)
 static int _idtcm_adjphase(struct idtcm_channel *channel, s32 delta_ns)
 {
 	struct idtcm *idtcm = channel->idtcm;
-	int err;
-	u8 i;
 	u8 buf[4] = {0};
 	s32 phase_50ps;
 	s64 offset_ps;
+	int err;
+	u8 i;
 
 	if (channel->mode != PTP_PLL_MODE_WRITE_PHASE) {
 		err = channel->configure_write_phase(channel);
