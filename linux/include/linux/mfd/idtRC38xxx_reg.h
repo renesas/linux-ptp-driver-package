@@ -4,8 +4,8 @@
  *
  * Copyright (C) 2023 Integrated Device Technology, Inc., a Renesas Company.
  */
-#ifndef HAVE_IDTRC38XXX_REG
-#define HAVE_IDTRC38XXX_REG
+#ifndef MFD_IDTRC38XXX_REG
+#define MFD_IDTRC38XXX_REG
 
 /* GLOBAL */
 #define SOFT_RESET_CTRL		(0x15) /* Specific to FC3W */
@@ -56,7 +56,7 @@
 #define TOD_COUNTER_READ_REQ_VFC3A	(0x6df)
 #define TOD_SYNC_LOAD_VAL_CTRL		(0xa10)
 #define TOD_SYNC_LOAD_VAL_CTRL_VFC3A	(0x690)
-#define SYNC_COUNTER_MASK		GENMASK(51, 0)
+#define SYNC_COUNTER_MASK		GENMASK_ULL(51, 0)
 #define SUB_SYNC_COUNTER_MASK		GENMASK(30, 0)
 #define TOD_SYNC_LOAD_REQ_CTRL		(0xa21)
 #define TOD_SYNC_LOAD_REQ_CTRL_VFC3A	(0x6a1)
@@ -129,7 +129,7 @@ enum tdc_meas_mode {
 
 #define TDC_FIFO_READ_REQ	(0xB2F)
 #define TDC_FIFO_READ		(0xB30)
-#define COARSE_MEAS_MASK	GENMASK(39, 13)
+#define COARSE_MEAS_MASK	GENMASK_ULL(39, 13)
 #define FINE_MEAS_MASK		GENMASK(12, 0)
 
 #define TDC_FIFO_CTRL		(0xB12)
@@ -246,14 +246,12 @@ static inline int idtfc3_set_hw_param(struct idtfc3_hw_param *hw_param,
 		if (val > 80000000 || val < 10000000)
 			return -EINVAL;
 		hw_param->tdc_ref_freq = val;
-	}
-	else if (addr == TIME_CLK_FREQ_ADDR) {
+	} else if (addr == TIME_CLK_FREQ_ADDR) {
 		/* Time clock period must be whole nanoseconds */
 		if (NSEC_PER_SEC % val)
 			return -EINVAL;
 		hw_param->time_clk_freq = val;
-	}
-	else
+	} else
 		return -EFAULT;
 
 	return 0;
