@@ -81,7 +81,7 @@ static int load_firmware(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 
 out:
 	release_firmware(fw);
-	return err;	
+	return err;
 }
 
 static int reg_readwrite(struct rsmu_cdev *rsmu, u16 offset, u8 *val8, u8 write)
@@ -313,8 +313,7 @@ static int rsmu_sabre_set_holdover_mode(struct rsmu_cdev *rsmu, u8 dpll, u8 enab
 	} else {
 		prev_mode = rsmu_get_bitfield(dpll_operating_mode_cnfg_prev[dpll], 0x1f, 0);
 
-		switch(prev_mode)
-		{
+		switch (prev_mode) {
 		case PLL_MODE_DCO:
 			err = set_dpll_oper_mode(rsmu, dpll, PLL_MODE_DCO, false);
 			if (err)
@@ -344,9 +343,8 @@ static int rsmu_sabre_init(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 	int err;
 
 	err = load_firmware(rsmu, fwname);
-	if (err) {
-		dev_warn(rsmu->dev, "loading firmware failed with %d", err);			
-	}
+	if (err)
+		dev_warn(rsmu->dev, "loading firmware failed with %d", err);
 
 	return 0;
 }

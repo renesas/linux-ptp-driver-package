@@ -184,8 +184,10 @@ static int rsmu_cm_set_holdover_mode(struct rsmu_cdev *rsmu, u8 dpll, u8 enable,
 	if (err)
 		return err;
 
-	/* To enable holdover, set state_mode (bits [0, 2]) to force_holdover (3).
-	   To disable holdover, set state_mode (bits [0, 2]) to automatic (0). */
+	/*
+	 * To enable holdover, set state_mode (bits [0, 2]) to force_holdover (3).
+	 * To disable holdover, set state_mode (bits [0, 2]) to automatic (0).
+	 */
 	state_mode = reg & 0x7;
 	if (enable) {
 		if (state_mode == 3)
@@ -395,7 +397,7 @@ static int load_firmware(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 
 out:
 	release_firmware(fw);
-	return err;	
+	return err;
 }
 
 static int rsmu_cm_get_clock_index(struct rsmu_cdev *rsmu,
@@ -416,11 +418,10 @@ static int rsmu_cm_get_clock_index(struct rsmu_cdev *rsmu,
 
 	reg &= DPLL_REF_STATUS_MASK;
 
-	if (reg > (MAX_ELECTRICAL_REFERENCES - 1)) {
+	if (reg > (MAX_ELECTRICAL_REFERENCES - 1))
 		*clock_index = -1;
-	} else {
+	else
 		*clock_index = reg;
-	}
 
 	return err;
 }
@@ -431,20 +432,20 @@ static int rsmu_cm_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 numb
 	u32 dpll_reg_addr;
 	u8 dpll_mode_reg_off;
 	int priority_index;
-  	int prev_priority_group = 0;
-  	u8 current_priority_group;
-  	int prev_priority = -1;
+	int prev_priority_group = 0;
+	u8 current_priority_group;
+	int prev_priority = -1;
 	u8 reg;
 	int err;
 
 	err = get_dpll_reg_offset(FW_VERSION(rsmu), dpll, &dpll_reg_addr);
 	if (err)
 		return err;
-	
+
 	/* MAX_REF_PRIORITIES is maximum number of priorities */
 	if (number_entries > MAX_REF_PRIORITIES)
 		return -EINVAL;
-	
+
 	dpll_mode_reg_off = IDTCM_FW_REG(FW_VERSION(rsmu), V520, DPLL_MODE);
 
 	for (priority_index = 0; priority_index < number_entries; priority_index++) {
@@ -529,14 +530,13 @@ static int rsmu_cm_init(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 	rsmu->ddata = ddata;
 
 	err = load_firmware(rsmu, fwname);
-	if (err) {
-		dev_warn(rsmu->dev, "loading firmware failed with %d", err);			
-	}
+	if (err)
+		dev_warn(rsmu->dev, "loading firmware failed with %d", err);
 
 	err = get_fw_version(rsmu);
 	if (err) {
 		dev_err(rsmu->dev, "getting firmware version failed with %d", err);
-		return err;			
+		return err;
 	}
 
 	return 0;
