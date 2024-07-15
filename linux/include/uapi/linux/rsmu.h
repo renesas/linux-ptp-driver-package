@@ -41,8 +41,7 @@ struct rsmu_holdover_mode {
 };
 
 /* Set output TDC go bit */
-struct rsmu_set_output_tdc_go
-{
+struct rsmu_set_output_tdc_go {
 	__u8 tdc;
 	__u8 enable;
 };
@@ -55,36 +54,31 @@ struct rsmu_reg_rw {
 };
 
 /* Get current clock index */
-struct rsmu_current_clock_index
-{
+struct rsmu_current_clock_index {
 	__u8 dpll;
 	__s8 clock_index;
 };
 
-struct rsmu_priority_entry
-{
+struct rsmu_priority_entry {
 	__u8 clock_index;
 	__u8 priority;
 };
 
 /* Set clock priorities */
-struct rsmu_clock_priorities
-{
+struct rsmu_clock_priorities {
 	__u8 dpll;
 	__u8 num_entries;
 	struct rsmu_priority_entry priority_entry[MAX_NUM_PRIORITY_ENTRIES];
 };
 
-struct rsmu_reference_monitor_status_alarms
-{
+struct rsmu_reference_monitor_status_alarms {
 	__u8 los;
 	__u8 no_activity;
 	__u8 frequency_offset_limit;
 };
 
 /* Get reference monitor status */
-struct rsmu_reference_monitor_status
-{
+struct rsmu_reference_monitor_status {
 	__u8 clock_index;
 	struct rsmu_reference_monitor_status_alarms alarms;
 };

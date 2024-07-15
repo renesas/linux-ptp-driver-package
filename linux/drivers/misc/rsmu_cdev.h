@@ -12,6 +12,7 @@
 #include <linux/miscdevice.h>
 #include <linux/regmap.h>
 #include <uapi/linux/rsmu.h>
+#include <linux/bitfield.h>
 
 struct rsmu_ops;
 
@@ -29,9 +30,11 @@ struct rsmu_ops;
  * data    bitfield data to set
  */
 #define rsmu_set_bitfield(regVal, mask, lsb, data) \
-  regVal = ( (regVal & ~(mask)) |                  \
-             ((data << lsb) & (mask))              \
-           )
+({						   \
+	regVal = ((regVal & ~(mask)) |             \
+		  ((data << lsb) & (mask))         \
+		 );				   \
+})
 
 /**
  * Define function to get bitfield value of read data from device
@@ -44,7 +47,7 @@ struct rsmu_ops;
  * lsb     least significant bit
  */
 #define rsmu_get_bitfield(regVal, mask, lsb) \
-  ((regVal & mask) >> lsb)
+	((regVal & mask) >> lsb)
 
 
 enum holdover_mode {

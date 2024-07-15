@@ -49,7 +49,7 @@ rsmu_set_combomode(struct rsmu_cdev *rsmu, void __user *arg)
 		return -EFAULT;
 
 	if (ops->set_combomode == NULL)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	mutex_lock(rsmu->lock);
 	err = ops->set_combomode(rsmu, mode.dpll, mode.mode);
@@ -70,7 +70,7 @@ rsmu_get_dpll_state(struct rsmu_cdev *rsmu, void __user *arg)
 		return -EFAULT;
 
 	if (ops->get_dpll_state == NULL)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	mutex_lock(rsmu->lock);
 	err = ops->get_dpll_state(rsmu, state_request.dpll, &state);
@@ -94,7 +94,7 @@ rsmu_get_dpll_ffo(struct rsmu_cdev *rsmu, void __user *arg)
 		return -EFAULT;
 
 	if (ops->get_dpll_ffo == NULL)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	mutex_lock(rsmu->lock);
 	err = ops->get_dpll_ffo(rsmu, ffo_request.dpll, &ffo_request);
@@ -117,7 +117,7 @@ rsmu_set_holdover_mode(struct rsmu_cdev *rsmu, void __user *arg)
 		return -EFAULT;
 
 	if (ops->set_holdover_mode == NULL)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	mutex_lock(rsmu->lock);
 	err = ops->set_holdover_mode(rsmu, request.dpll, request.enable, request.mode);
@@ -137,7 +137,7 @@ rsmu_set_output_tdc_go(struct rsmu_cdev *rsmu, void __user *arg)
 		return -EFAULT;
 
 	if (ops->set_output_tdc_go == NULL)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	mutex_lock(rsmu->lock);
 	err = ops->set_output_tdc_go(rsmu, request.tdc, request.enable);
@@ -193,7 +193,7 @@ rsmu_get_clock_index(struct rsmu_cdev *rsmu, void __user *arg)
 		return -EFAULT;
 
 	if (ops->get_clock_index == NULL)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	mutex_lock(rsmu->lock);
 	err = ops->get_clock_index(rsmu, request.dpll, &clock_index);
@@ -217,7 +217,7 @@ rsmu_set_clock_priorities(struct rsmu_cdev *rsmu, void __user *arg)
 		return -EFAULT;
 
 	if (ops->set_clock_priorities == NULL)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	mutex_lock(rsmu->lock);
 	err = ops->set_clock_priorities(rsmu, request.dpll, request.num_entries, request.priority_entry);
@@ -238,7 +238,7 @@ rsmu_get_reference_monitor_status(struct rsmu_cdev *rsmu, void __user *arg)
 		return -EFAULT;
 
 	if (ops->get_reference_monitor_status == NULL)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	mutex_lock(rsmu->lock);
 	err = ops->get_reference_monitor_status(rsmu, request.clock_index, &alarms);
@@ -259,7 +259,7 @@ rsmu_get_tdc_meas(struct rsmu_cdev *rsmu, void __user *arg)
 	int err;
 
 	if (ops->get_tdc_meas == NULL)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	if (copy_from_user(&meas, arg, sizeof(meas)))
 		return -EFAULT;
@@ -395,7 +395,7 @@ rsmu_probe(struct platform_device *pdev)
 		if (err) {
 			dev_err(rsmu->dev, "Device initialization failed\n");
 			ida_simple_remove(&rsmu_cdev_map, rsmu->index);
-			return err;			
+			return err;
 		}
 	}
 
