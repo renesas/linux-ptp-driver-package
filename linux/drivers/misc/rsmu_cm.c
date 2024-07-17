@@ -202,7 +202,8 @@ static int rsmu_cm_set_holdover_mode(struct rsmu_cdev *rsmu, u8 dpll, u8 enable,
 	if (enable)
 		reg |= 3;
 
-	return regmap_bulk_write(rsmu->regmap, dpll_reg_addr + dpll_mode_reg_off, &reg, sizeof(reg));
+	return regmap_bulk_write(rsmu->regmap, dpll_reg_addr + dpll_mode_reg_off,
+				 &reg, sizeof(reg));
 }
 
 static int rsmu_cm_set_output_tdc_go(struct rsmu_cdev *rsmu, u8 tdc, u8 enable)
@@ -449,12 +450,14 @@ static int rsmu_cm_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 numb
 	dpll_mode_reg_off = IDTCM_FW_REG(FW_VERSION(rsmu), V520, DPLL_MODE);
 
 	for (priority_index = 0; priority_index < number_entries; priority_index++) {
-		if ((priority_entry->clock_index >= MAX_ELECTRICAL_REFERENCES) || (priority_entry->priority >= MAX_REF_PRIORITIES))
+		if ((priority_entry->clock_index >= MAX_ELECTRICAL_REFERENCES) ||
+		    (priority_entry->priority >= MAX_REF_PRIORITIES))
 			return -EINVAL;
 
 		if (priority_entry->priority == prev_priority) {
 			current_priority_group = prev_priority_group;
-		} else if ((priority_index < (number_entries - 1)) && (priority_entry->priority == (priority_entry + 1)->priority)) {
+		} else if ((priority_index < (number_entries - 1)) &&
+			  (priority_entry->priority == (priority_entry + 1)->priority)) {
 			if (prev_priority_group < MAX_PRIORITY_GROUP) {
 				prev_priority_group++;
 				current_priority_group = prev_priority_group;
@@ -471,8 +474,8 @@ static int rsmu_cm_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 numb
 			(priority_entry->clock_index << DPLL_REF_PRIORITY_REF_SHIFT) |
 			(current_priority_group << DPLL_REF_PRIORITY_GROUP_NUMBER_SHIFT);
 
-		err = regmap_bulk_write(rsmu->regmap, dpll_reg_addr + DPLL_REF_PRIORITY_0 + priority_index,
-							&reg, sizeof(reg));
+		err = regmap_bulk_write(rsmu->regmap, dpll_reg_addr + DPLL_REF_PRIORITY_0 +
+					priority_index, &reg, sizeof(reg));
 		if (err)
 			return err;
 
@@ -484,17 +487,19 @@ static int rsmu_cm_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 numb
 			(0 << DPLL_REF_PRIORITY_REF_SHIFT) |
 			(DEFAULT_PRIORITY_GROUP << DPLL_REF_PRIORITY_GROUP_NUMBER_SHIFT);
 
-		err = regmap_bulk_write(rsmu->regmap, dpll_reg_addr + DPLL_REF_PRIORITY_0 + priority_index,
-							&reg, sizeof(reg));
+		err = regmap_bulk_write(rsmu->regmap, dpll_reg_addr + DPLL_REF_PRIORITY_0 +
+					priority_index, &reg, sizeof(reg));
 		if (err)
 			return err;
 	}
 
-	err = regmap_bulk_read(rsmu->regmap, dpll_reg_addr + dpll_mode_reg_off, &reg, sizeof(reg));
+	err = regmap_bulk_read(rsmu->regmap, dpll_reg_addr + dpll_mode_reg_off,
+			       &reg, sizeof(reg));
 	if (err)
 		return err;
 
-	return regmap_bulk_write(rsmu->regmap, dpll_reg_addr + dpll_mode_reg_off, &reg, sizeof(reg));
+	return regmap_bulk_write(rsmu->regmap, dpll_reg_addr + dpll_mode_reg_off,
+				 &reg, sizeof(reg));
 }
 
 static int rsmu_cm_get_reference_monitor_status(struct rsmu_cdev *rsmu, u8 clock_index,
