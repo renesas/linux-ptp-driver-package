@@ -220,7 +220,8 @@ rsmu_set_clock_priorities(struct rsmu_cdev *rsmu, void __user *arg)
 		return -EOPNOTSUPP;
 
 	mutex_lock(rsmu->lock);
-	err = ops->set_clock_priorities(rsmu, request.dpll, request.num_entries, request.priority_entry);
+	err = ops->set_clock_priorities(rsmu, request.dpll, request.num_entries,
+					request.priority_entry);
 	mutex_unlock(rsmu->lock);
 
 	return err;

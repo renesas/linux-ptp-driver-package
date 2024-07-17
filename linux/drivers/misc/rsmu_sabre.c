@@ -130,7 +130,8 @@ static int reg_dpll_operating_mode_cnfg_offset(u8 dpll, u16 *offset)
 	return 0;
 }
 
-static int rmw_reg_dpll_operating_mode_cnfg(struct rsmu_cdev *rsmu, u8 dpll, u8 mask, u8 lsb, u8 val8, u8 *prev8)
+static int rmw_reg_dpll_operating_mode_cnfg(struct rsmu_cdev *rsmu, u8 dpll, u8 mask,
+					    u8 lsb, u8 val8, u8 *prev8)
 {
 	u16 offset;
 	int err;
@@ -158,7 +159,8 @@ static int reg_dpll_holdover_mode_cnfg_msb_offset(u8 dpll, u16 *offset)
 	return 0;
 }
 
-static int rmw_reg_dpll_holdover_mode_cnfg_msb(struct rsmu_cdev *rsmu, u8 dpll, u8 mask, u8 lsb, u8 val8, u8 *prev8)
+static int rmw_reg_dpll_holdover_mode_cnfg_msb(struct rsmu_cdev *rsmu, u8 dpll,
+					       u8 mask, u8 lsb, u8 val8, u8 *prev8)
 {
 	u16 offset;
 	int err;
@@ -173,7 +175,8 @@ static int rmw_reg_dpll_holdover_mode_cnfg_msb(struct rsmu_cdev *rsmu, u8 dpll, 
 static int set_dpll_oper_mode(struct rsmu_cdev *rsmu, u8 dpll, enum pll_mode mode, bool save_prev)
 {
 	if (save_prev)
-		return rmw_reg_dpll_operating_mode_cnfg(rsmu, dpll, 0x1f, 0, mode, &dpll_operating_mode_cnfg_prev[dpll]);
+		return rmw_reg_dpll_operating_mode_cnfg(rsmu, dpll, 0x1f, 0, mode,
+							&dpll_operating_mode_cnfg_prev[dpll]);
 	else
 		return rmw_reg_dpll_operating_mode_cnfg(rsmu, dpll, 0x1f, 0, mode, NULL);
 }
@@ -331,7 +334,8 @@ static int rsmu_sabre_set_holdover_mode(struct rsmu_cdev *rsmu, u8 dpll, u8 enab
 
 		default:
 			/* Do nothing*/
-			dev_err(rsmu->dev, "%s: Unsupported operating mode 0x%02x", __func__, prev_mode);
+			dev_err(rsmu->dev, "%s: Unsupported operating mode 0x%02x",
+				__func__, prev_mode);
 			break;
 		}
 	}

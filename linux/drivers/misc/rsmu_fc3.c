@@ -280,7 +280,7 @@ static int load_firmware(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 			rec++;
 
 			err = idtfc3_set_hw_param(HW_PARAM(rsmu), addr,
-									  get_unaligned_be32((void *)rec));
+						  get_unaligned_be32((void *)rec));
 			if (err == 0)
 				rec++;
 		}
@@ -320,7 +320,8 @@ static u8 clock_index_to_ref_index(struct rsmu_cdev *rsmu, u8 clock_index)
 		return err;
 
 	for (ref_index = 0; ref_index <= MAX_REF_INDEX; ref_index++) {
-		if (clock_index == ((ref_sel_cnfg_reg >> (REF_MUX_SEL_SHIFT * ref_index)) & REF_MUX_SEL_MASK))
+		if (clock_index == ((ref_sel_cnfg_reg >> (REF_MUX_SEL_SHIFT * ref_index)) &
+				     REF_MUX_SEL_MASK))
 			return ref_index;
 	}
 
@@ -527,16 +528,20 @@ static int rsmu_fc3_get_clock_index(struct rsmu_cdev *rsmu,
 	if (err)
 		return err;
 
-	dpll_state_sts = (enum dpll_state)((dpll_sts_reg & DPLL_STATE_STS_MASK) >> DPLL_STATE_STS_SHIFT);
-	if ((dpll_state_sts == DPLL_STATE_LOCKED) || (dpll_state_sts == DPLL_STATE_ACQUIRE) || (dpll_state_sts == DPLL_STATE_HITLESS_SWITCH)) {
+	dpll_state_sts = (enum dpll_state)((dpll_sts_reg & DPLL_STATE_STS_MASK) >>
+					   DPLL_STATE_STS_SHIFT);
+	if ((dpll_state_sts == DPLL_STATE_LOCKED) || (dpll_state_sts == DPLL_STATE_ACQUIRE) ||
+	    (dpll_state_sts == DPLL_STATE_HITLESS_SWITCH)) {
 		ref_index = (dpll_sts_reg & DPLL_REF_SEL_STS_MASK) >> DPLL_REF_SEL_STS_SHIFT;
 
 		reg_addr = IDTFC3_FW_REG(devid, VFC3A, REF_SEL_CNFG);
-		err = regmap_bulk_read(rsmu->regmap, reg_addr, &ref_sel_cnfg_reg, sizeof(ref_sel_cnfg_reg));
+		err = regmap_bulk_read(rsmu->regmap, reg_addr, &ref_sel_cnfg_reg,
+				       sizeof(ref_sel_cnfg_reg));
 		if (err)
 			return err;
 
-		*clock_index = (ref_sel_cnfg_reg >> (REF_MUX_SEL_SHIFT * ref_index)) & REF_MUX_SEL_MASK;
+		*clock_index = (ref_sel_cnfg_reg >> (REF_MUX_SEL_SHIFT * ref_index)) &
+						    REF_MUX_SEL_MASK;
 	}
 
 	return err;
@@ -568,7 +573,10 @@ static int rsmu_fc3_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 num
 	if (number_entries > MAX_NUM_REF_PRIORITY)
 		return -EINVAL;
 
-	/* Disable clock priorities initially and then enable as needed in loop (dpll_refx_priority_disable[3:0]) */
+	/*
+	 * Disable clock priorities initially and then enable as needed in loop
+	 * (dpll_refx_priority_disable[3:0])
+	 */
 	reg |= DPLL_REFX_PRIORITY_DISABLE_MASK;
 
 	for (priority_index = 0; priority_index < number_entries; priority_index++) {
@@ -583,16 +591,20 @@ static int rsmu_fc3_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 num
 		/* Set clock priority disable bit to zero to enable it */
 		switch (ref_index) {
 		case 0:
-			reg = ((reg & (~DPLL_REF0_PRIORITY_ENABLE_AND_SET_MASK)) | (priority << DPLL_REF0_PRIORITY_SHIFT));
+			reg = ((reg & (~DPLL_REF0_PRIORITY_ENABLE_AND_SET_MASK)) |
+			       (priority << DPLL_REF0_PRIORITY_SHIFT));
 			break;
 		case 1:
-			reg = ((reg & (~DPLL_REF1_PRIORITY_ENABLE_AND_SET_MASK)) | (priority << DPLL_REF1_PRIORITY_SHIFT));
+			reg = ((reg & (~DPLL_REF1_PRIORITY_ENABLE_AND_SET_MASK)) |
+			       (priority << DPLL_REF1_PRIORITY_SHIFT));
 			break;
 		case 2:
-			reg = ((reg & (~DPLL_REF2_PRIORITY_ENABLE_AND_SET_MASK)) | (priority << DPLL_REF2_PRIORITY_SHIFT));
+			reg = ((reg & (~DPLL_REF2_PRIORITY_ENABLE_AND_SET_MASK)) |
+			       (priority << DPLL_REF2_PRIORITY_SHIFT));
 			break;
 		case 3:
-			reg = ((reg & (~DPLL_REF3_PRIORITY_ENABLE_AND_SET_MASK)) | (priority << DPLL_REF3_PRIORITY_SHIFT));
+			reg = ((reg & (~DPLL_REF3_PRIORITY_ENABLE_AND_SET_MASK)) |
+			       (priority << DPLL_REF3_PRIORITY_SHIFT));
 			break;
 		default:
 			return -EINVAL;
@@ -612,7 +624,7 @@ static int rsmu_fc3_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 num
 }
 
 static int rsmu_fc3_get_reference_monitor_status(struct rsmu_cdev *rsmu, u8 clock_index,
-						 struct rsmu_reference_monitor_status_alarms *alarms)
+					struct rsmu_reference_monitor_status_alarms *alarms)
 {
 	u8 ref_index;
 	u16 losmon_sts_reg_addr;
@@ -664,7 +676,7 @@ static int rsmu_fc3_get_tdc_meas(struct rsmu_cdev *rsmu, bool continuous, s64 *o
 	u8 mode = ONE_SHOT;
 
 	if (DEVID(rsmu) == VFC3A)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	if (continuous)
 		mode = CONTINUOUS;
