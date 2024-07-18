@@ -40,7 +40,7 @@ copy_files $SRC $DST "rsmu.h rsmu_core.c rsmu_i2c.c rsmu_spi.c"
 TARGET=include/linux/mfd
 copy_files $SRC_DIR/linux/$TARGET \
            $DST_DIR/$TARGET \
-           "idt82p33_reg.h idt8a340_reg.h rsmu.h"
+           "idt82p33_reg.h idt8a340_reg.h idtRC38xxx_reg.h rsmu.h"
 
 
 echo PTP
@@ -71,7 +71,7 @@ insert_driver_misc_Makefile $SRC $DST
 clean_driver_misc_Kconfig $DST
 insert_driver_misc_Kconfig $SRC $DST
 
-copy_files $SRC $DST "rsmu_cdev.c rsmu_cdev.h rsmu_cm.c rsmu_sabre.c"
+copy_files $SRC $DST "rsmu_cdev.c rsmu_cdev.h rsmu_cm.c rsmu_sabre.c rsmu_fc3.c"
 
 TARGET=include/uapi/linux
 copy_files $SRC_DIR/linux/$TARGET \
