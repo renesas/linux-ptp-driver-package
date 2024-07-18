@@ -1,6 +1,5 @@
-commit b48523fcd348d7e7b9553ff190d4c0d99407ac3e (HEAD -> develop, origin/develop)
+commit 0594d41121cd6d02b24f93a3bcdafe9e7691b404 (HEAD -> develop, origin/feature/STEELAI-755, origin/develop, feature/STEELAI-755)
+Author: Min Li <min.li.xe@renesas.com>
+Date:   Wed Jul 17 16:14:58 2024 -0400
 
-Date:   Fri Nov 4 15:52:32 2022 -0400
-
-    [STEELAI-704] rsmu: call regmap_exit() on exit
-
+    [STEELAI-755] add FC3 to Kconfig and Makefile
