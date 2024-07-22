@@ -25,7 +25,7 @@
 #include "print.h"
 
 static int verbose = 0;
-int print_level = LOG_INFO;
+static int print_level = LOG_INFO;
 static int use_syslog = 1;
 static const char *progname;
 static const char *message_tag;
