@@ -39,18 +39,7 @@
 #include <sys/time.h>
 #include <stdint.h>
 
-#include <stdbool.h>
-#include <sys/queue.h>
-#include <time.h>
-
-#include "servo.h"
-#include "clockadj.h"
-#include "config.h"
-#include "contain.h"
-#include "interface.h"
-#include "phc.h"
 #include "print.h"
-#include "ts2phc.h"
 #include "version.h"
 #include "../linux/include/uapi/linux/rsmu.h"
 
@@ -97,14 +86,6 @@ typedef int (*cmd_func_t)(int, int, char *[]);
 struct cmd_t {
 	const char *name;
 	const cmd_func_t function;
-};
-
-struct ptp4l {
-	clockid_t clkid;
-	double period;
-	int write_phase_mode;
-	struct servo *servo;
-	enum servo_state servo_state;	
 };
 
 static cmd_func_t get_command_function(const char *name);
@@ -174,9 +155,6 @@ static void usage(const char *progname)
 		"   get_ffo <dpll_n>                                get <dpll_n> FFO in ppb\n"
 		"   get_reference_monitor_status <clock_n>          get reference monitor status of <clock_n>\n"
 		"   get_state <dpll_n>                              get state of <dpll_n>\n"
-		"   get_tdc_meas <mode 1/0> <cfg> <period(s)>       get a tdc measurement (FC3W only)\n"
-                "                                                   mode 1: continuous, 0: one-shot\n"
-		"   time_sync_ext <cfg> <period(s)>                 align time_sync with input signal (FC3W only)\n"
 		"   rd <offset (hex)> [count]                       read [count] bytes from offset (by default [count] is 1)\n"
 		"   set_clock_priorities <dpll_n> <num_entries>     set [clock_n] [priority_n] for <num_entries> of <dpll_n>\n"
 		"                        [clock_n] [priority_n]\n"
@@ -189,89 +167,15 @@ static void usage(const char *progname)
 		"                                                      1   FREQ_OFFSET\n"
 		"                                                      2   FAST_AVG_FREQ_OFFSET\n"
 		"                                                      3   PLL_COMBO_MODE_HOLD\n"
-		"  set_holdover_mode <dpll_n> <enable> <mode>       set holdover mode\n"
-		"  set_output_tdc_go <tdc_n> <enable>               set output TDC go bit\n"
-		"  wait <seconds>                                   pause <seconds> between commands\n"
-		"  wr <offset (hex)> <count> <val (hex)>            write [count] bytes with <val> to <offset>\n"
+		"  set_holdover_mode <dpll_n> <enable> <mode>        set holdover mode\n"
+		"  set_output_tdc_go <tdc_n> <enable>                set output TDC go bit\n"
+		"  wait <seconds>                                    pause <seconds> between commands\n"
+		"  wr <offset (hex)> <count> <val (hex)>             write [count] bytes with <val> to <offset>\n"
 		"\n",
 		progname);
 }
 
 /* Argument handler functions */
-static int handle_cfg_arg(const char *func_name, char *config, struct config **cfg)
-{
-	struct config *tmp;
-
-	tmp = config_create();
-	if (!tmp) {
-		pr_err("%s: config_create failed", func_name);
-		return -2;
-	}
-
-	if (config && config_read(config, tmp)) {
-		pr_err("%s: config_read failed", func_name);
-		config_destroy(tmp);
-		return -2;
-	}
-
-	*cfg = tmp;
-	return 0;
-}
-
-static int handle_meas_mode_arg(const char *func_name, char *mode, bool *continuous)
-{
-	enum parser_result r;
-	unsigned int tmp;
-
-	r = get_ranged_uint(mode, &tmp, 0, 1, BASE_DECIMAL);
-
-	switch (r) {
-	case PARSED_OK:
-		break;
-	case MALFORMED:
-		pr_err("%s: meas mode '%s' is not valid.", func_name, mode);
-		return -2;
-	case OUT_OF_RANGE:
-		pr_err("%s: meas mode '%s' is not valid.", func_name, mode);
-		return -2;
-	default:
-		pr_err("%s: couldn't process meas mode '%s'", func_name, mode);
-		return -2;
-	}
-
-	if(tmp)
-		*continuous = true;
-	else
-		*continuous = false;
-
-	return 0;
-}
-
-static int handle_period_arg(const char *func_name, char *period_arg, double *period)
-{
-	enum parser_result r;
-	double tmp;
-
-	r = get_ranged_double(period_arg, &tmp, 0.1, 2);
-
-	switch (r) {
-	case PARSED_OK:
-		break;
-	case MALFORMED:
-		pr_err("%s: threshold '%s' is not a valid uint", func_name, period_arg);
-		return -2;
-	case OUT_OF_RANGE:
-		pr_err("%s: threshold '%s' is out of range.", func_name, period_arg);
-		return -2;
-	default:
-		pr_err("%s: couldn't process threshold '%s'", func_name, period_arg);
-		return -2;
-	}
-
-	*period = tmp;
-
-	return 0;
-}
 
 static int handle_dpll_arg(const char *func_name, char *dpll_arg, unsigned char *dpll)
 {
@@ -605,240 +509,6 @@ static int do_get_ffo(int cdevFd, int cmdc, char *cmdv[])
 	return 1;
 }
 
-static int get_tdc_meas(int cdevFd, bool continuous, int64_t *offset, double period)
-{
-	struct rsmu_get_tdc_meas get = {0};
-	uint32_t period_ns = period * NS_PER_SEC;
-
-	get.continuous = continuous;
-
-	if (ioctl(cdevFd, RSMU_GET_TDC_MEAS, &get)) {
-		pr_err("%s: failed - is this a FC3W device?", __func__);
-		return -1;
-	}
-	
-	if ((get.offset == 0xbaddbadd) || (get.offset < 0)) {
-		pr_err("%s: measurement %lld is not valid", __func__, get.offset);
-		return -1;
-	}
-
-	if(get.offset >= period_ns) {
-		get.offset = get.offset - period_ns;
-	}
-	else if(get.offset > period_ns / 2)
-		get.offset = -(period_ns - get.offset);
-
-	*offset = -get.offset;
-	return 0;
-}
-
-static struct servo *rsmu_servo_create(struct ptp4l *ptp4l, struct config *cfg)
-{
-	enum servo_type type = config_get_int(cfg, NULL, "clock_servo");
-	struct servo *servo;
-	double fadj;
-	int max_adj;
-
-	fadj = clockadj_get_freq(ptp4l->clkid);
-
-	max_adj = phc_max_adj(ptp4l->clkid);
-
-	servo = servo_create(cfg, type, -fadj, max_adj, 0);
-	if (!servo)
-		return NULL;
-
-	servo_sync_interval(servo, ptp4l->period);
-
-	return servo;
-}
-
-static int phc_init(struct ptp4l *ptp4l, struct config *cfg)
-{
-	struct interface *iface = STAILQ_FIRST(&cfg->interfaces);
-
-	ptp4l->clkid = phc_open(interface_name(iface));
-	if (ptp4l->clkid == CLOCK_INVALID)
-		return -1;
-
-	return 0;
-}
-
-static int ptp4l_init(struct config *cfg, struct ptp4l *ptp4l, double period)
-{
-	int err;
-
-	err = phc_init(ptp4l, cfg);
-	if (err) {
-		pr_err("phc_init: failed");
-		return err;
-	}	
-
-	ptp4l->period = period;
-	ptp4l->servo_state = SERVO_UNLOCKED;
-	ptp4l->servo = rsmu_servo_create(ptp4l, cfg);
-	if (ptp4l->servo == NULL) {
-		pr_err("servo_create: failed");
-		return -1;
-	}
-
-	ptp4l->write_phase_mode = config_get_int(cfg, NULL, "write_phase_mode");
-
-	return 0;	
-}
-
-static void ptp4l_close(struct config *cfg, struct ptp4l *ptp4l)
-{
-	if(cfg)
-		config_destroy(cfg);
-
-	if(ptp4l->servo)
-		servo_destroy(ptp4l->servo);
-
-	phc_close(ptp4l->clkid);
-}
-
-static int synchronize_clock(int cdevFd, struct ptp4l *ptp4l)
-{
-	bool continuous = false;
-	struct timespec ts;
-	int64_t ts_ns;
-	int64_t offset;
-	double adj;
-	int err;
-
-	do {
-		/* default to continuous mode */
-		err = get_tdc_meas(cdevFd, continuous, &offset, ptp4l->period);
-		if (err) {
-			return err;
-		}
-
-		clock_gettime(CLOCK_MONOTONIC, &ts);
-		ts_ns = tmv_to_nanoseconds(timespec_to_tmv(ts));
-
-		adj = servo_sample(ptp4l->servo, offset, ts_ns,
-				   1.0, &ptp4l->servo_state);
-
-		pr_info("offset %10" PRId64 " s%d freq %+7.0f",
-			offset, ptp4l->servo_state, adj);
-
-		switch (ptp4l->servo_state) {
-		case SERVO_UNLOCKED:
-			continuous = false;
-			break;
-		case SERVO_JUMP:
-			continuous = false;
-			if (clockadj_set_freq(ptp4l->clkid, -adj)) {
-				goto servo_unlock;
-			}
-			if (clockadj_step(ptp4l->clkid, -offset)) {
-				goto servo_unlock;
-			}
-			/* Wait for time sync pulse to catch up */
-			usleep(ptp4l->period * 1000000);
-			break;
-		case SERVO_LOCKED:
-			continuous = true;
-			if (clockadj_set_freq(ptp4l->clkid, -adj)) {
-				goto servo_unlock;
-			}
-			break;
-		case SERVO_LOCKED_STABLE:
-			if (ptp4l->write_phase_mode) {
-				if (clockadj_set_phase(ptp4l->clkid, -offset)) {
-					goto servo_unlock;
-				}
-				adj = 0;
-			} else {
-				if (clockadj_set_freq(ptp4l->clkid, -adj)) {
-					goto servo_unlock;
-				}
-			}
-		}
-		continue;
-
-servo_unlock:
-		servo_reset(ptp4l->servo);
-		ptp4l->servo_state = SERVO_UNLOCKED;
-	} while(true);
-
-	return 0;
-}
-
-static int do_synchronize_clock(int cdevFd, int cmdc, char *cmdv[])
-{
-	struct config *cfg = NULL;
-	struct ptp4l ptp4l = {0};
-	double period;
-	int err;
-
-	if (cmdc < 2 || name_is_a_command(cmdv[0])) {
-		pr_err("%s: missing required config file", __func__);
-		return -2;
-	}
-
-	err = handle_cfg_arg(__func__, cmdv[0], &cfg);
-	if (err) {
-		return err;
-	}
-
-	if (!name_is_a_command(cmdv[1])) {
-		err = handle_period_arg(__func__, cmdv[1], &period);
-		if (err) {
-			period = 1;
-		}
-	}
-
-	err = ptp4l_init(cfg, &ptp4l, period);
-	if (err) {
-		ptp4l_close(cfg, &ptp4l);
-		return err;
-	}
-
-	err = synchronize_clock(cdevFd, &ptp4l);
-	if (err) {
-		ptp4l_close(cfg, &ptp4l);
-		return err;
-	}	
-	
-	ptp4l_close(cfg, &ptp4l);
-
-	return 2;
-}
-
-static int do_get_tdc_meas(int cdevFd, int cmdc, char *cmdv[])
-{
-	int err;
-	bool continuous;
-	int64_t offset;
-	double period;
-
-	if (cmdc < 2 || name_is_a_command(cmdv[0])) {
-		pr_err("%s: missing tdc meas mode argument", __func__);
-		return -2;
-	}
-
-	err = handle_meas_mode_arg(__func__, cmdv[0], &continuous);
-	if (err) {
-		return err;
-	}
-
-	if (!name_is_a_command(cmdv[1])) {
-		err = handle_period_arg(__func__, cmdv[1], &period);
-		if (err) {
-			period = 1;
-		}
-	}
-
-	err = get_tdc_meas(cdevFd, continuous, &offset, period);
-	if (err) {
-		return -1;
-	}
-
-	printf("TDC measurement: offset = %ld ns\n", offset);
-	return 2;
-}
-
 static int do_get_reference_monitor_status(int cdevFd, int cmdc, char *cmdv[])
 {
 	struct rsmu_reference_monitor_status get = {0};
@@ -1004,7 +674,7 @@ static int do_set_clock_priorities(int cdevFd, int cmdc, char *cmdv[])
 	}
 
 	if (ioctl(cdevFd, RSMU_SET_CLOCK_PRIORITIES, &set)) {
-		pr_err("%s: failed - is dpll %u and number of entries %u valid for this part?", __func__, set.dpll, set.num_entries);
+		pr_err("%s: failed - is dpll %u valid for this part?", __func__, set.dpll);
 		return -1;
 	}
 
@@ -1221,8 +891,6 @@ static const struct cmd_t all_commands[] = {
 	{ "get_ffo", &do_get_ffo },
 	{ "get_reference_monitor_status", &do_get_reference_monitor_status },
 	{ "get_state", &do_get_state },
-	{ "get_tdc_meas", &do_get_tdc_meas },
-	{ "time_sync_ext", &do_synchronize_clock },
 	{ "rd", &do_rd },
 	{ "set_clock_priorities", &do_set_clock_priorities },
 	{ "set_combo_mode", &do_set_combo_mode },

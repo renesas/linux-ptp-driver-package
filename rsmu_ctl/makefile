@@ -22,24 +22,20 @@ KBUILD_OUTPUT =
 DEBUG	=
 CC	= $(CROSS_COMPILE)gcc
 VER     = -DVER=$(version)
-CFLAGS	= -Wall $(VER) $(incdefs) $(DEBUG) $(EXTRA_CFLAGS) -I linuxptp
+CFLAGS	= -Wall $(VER) $(incdefs) $(DEBUG) $(EXTRA_CFLAGS)
 LDLIBS	= -lm -lrt -pthread $(EXTRA_LDFLAGS)
 PRG	= rsmu_ctl
+OBJ	= print.o util.o version.o
 
-OBJ	= $(addprefix linuxptp/, config.o clockadj.o hash.o interface.o msg.o phc.o pmc_agent.o \
- pmc_common.o sk.o tlv.o transport.o raw.o print.o util.o\
- udp.o udp6.o uds.o linreg.o ntpshm.o nullf.o pi.o refclock_sock.o servo.o)
-
-OBJECTS	= $(OBJ) rsmu_ctl.o version.o
+OBJECTS	= $(OBJ) rsmu_ctl.o
 SRC	= $(OBJECTS:.o=.c)
 DEPEND	= $(OBJECTS:.o=.d)
 srcdir	:= $(dir $(lastword $(MAKEFILE_LIST)))
-incdefs := $(shell $(srcdir)/incdefs.sh)
 version := $(shell $(srcdir)/version.sh $(srcdir))
 VPATH	= $(srcdir)
 
 all: $(PRG)
-rsmu_ctl: $(OBJECTS)
+rsmu_ctl: rsmu_ctl.o print.o util.o version.o
 
 version.o: .version version.sh $(filter-out version.d,$(DEPEND))
 
