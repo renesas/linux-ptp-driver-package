@@ -17,7 +17,8 @@ Microsoft Studio Code (https://code.visualstudio.com/) can be used to view a ren
 ## Revision History
 | Version               | Package                                                 |
 |-----------------------|---------------------------------------------------------|
-| pcm4l 4.2.1 and above | 2.0                                                     |
+| pcm4l 4.3.0           | 2.0, 2.1                                                |
+| pcm4l 4.2.1++         | 2.0, 2.1                                                |
 | pcm4l 4.2.0           | Renesas_MFD_PTP_MISC_patches_2022_07_25_5ecd2144.tar.gz |
 | pcm4l 4.1.4           | Renesas_MFD_PTP_MISC_patches_2022_02_24_e9d9162c.tar.gz |
 | pcm4l 4.1.3 and below	| Renesas_MFD_PTP_MISC_patches_2021_09_17_59227acc.tar.gz |
