@@ -1,5 +1,6 @@
-commit 0594d41121cd6d02b24f93a3bcdafe9e7691b404 (HEAD -> develop, origin/feature/STEELAI-755, origin/develop, feature/STEELAI-755)
+commit ca06f31e767a1f777ff1c249c756e39942994d76 (HEAD -> develop, origin/develop)
 Author: Min Li <min.li.xe@renesas.com>
-Date:   Wed Jul 17 16:14:58 2024 -0400
+Date:   Wed Jul 31 16:01:05 2024 -0400
 
-    [STEELAI-755] add FC3 to Kconfig and Makefile
+    [STEELAI-798]: fix broken fc3 driver due to merging linux change
+
