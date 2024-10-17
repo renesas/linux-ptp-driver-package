@@ -15,7 +15,6 @@
 #define FW_FILENAME	"idtfc3.bin"
 
 #define MAX_FFO_PPB	(244000)
-#define TDC_GET_PERIOD	(10)
 #define LOCK_TIMEOUT_MS	(2000)
 #define LOCK_POLL_INTERVAL_MS	(10)
 
@@ -30,7 +29,7 @@ struct idtfc3 {
 	struct idtfc3_hw_param	hw_param;
 	u32			sub_sync_count;
 	u32			ns_per_sync;
-	int			tdc_offset_sign;
+	int			tdc_meas_on;
 	u64			tdc_apll_freq;
 	u32			time_ref_freq;
 	u16			fod_n;

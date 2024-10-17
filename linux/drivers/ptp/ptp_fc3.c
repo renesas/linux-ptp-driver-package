@@ -69,7 +69,7 @@ static s64 tdc_offset2phase(struct idtfc3 *idtfc3, s64 offset_ns)
 	if (offset_ns > idtfc3->ns_per_sync / 2)
 		offset_ns -= idtfc3->ns_per_sync;
 
-	return offset_ns * idtfc3->tdc_offset_sign;
+	return offset_ns;
 }
 
 static int idtfc3_enable_lpf(struct idtfc3 *idtfc3, bool enable)
@@ -133,38 +133,6 @@ static int idtfc3_get_time_ref_freq(struct idtfc3 *idtfc3)
 	return 0;
 }
 
-static int idtfc3_get_tdc_offset_sign(struct idtfc3 *idtfc3)
-{
-	int err;
-	u8 buf[4];
-	u32 val;
-	u8 sig1, sig2;
-
-	err = regmap_bulk_read(idtfc3->regmap, TIME_CLOCK_TDC_FANOUT_CNFG, buf, sizeof(buf));
-	if (err)
-		return err;
-
-	val = get_unaligned_le32(buf);
-	if ((val & TIME_SYNC_TO_TDC_EN) != TIME_SYNC_TO_TDC_EN) {
-		dev_err(idtfc3->dev, "TIME_SYNC_TO_TDC_EN is off !!!");
-		return -EINVAL;
-	}
-
-	sig1 = FIELD_GET(SIG1_MUX_SEL_MASK, val);
-	sig2 = FIELD_GET(SIG2_MUX_SEL_MASK, val);
-
-	if ((sig1 == sig2) || ((sig1 != TIME_SYNC) && (sig2 != TIME_SYNC))) {
-		dev_err(idtfc3->dev, "Invalid tdc_mux_sel sig1=%d sig2=%d", sig1, sig2);
-		return -EINVAL;
-	} else if (sig1 == TIME_SYNC) {
-		idtfc3->tdc_offset_sign = 1;
-	} else if (sig2 == TIME_SYNC) {
-		idtfc3->tdc_offset_sign = -1;
-	}
-
-	return 0;
-}
-
 static int idtfc3_lpf_bw(struct idtfc3 *idtfc3, u8 shift, u8 mult)
 {
 	u8 val = LPF_FILTER_DIS;
@@ -190,6 +158,8 @@ static int idtfc3_enable_tdc(struct idtfc3 *idtfc3, bool enable, u8 meas_mode)
 	int err;
 	u8 val = 0;
 
+	idtfc3->tdc_meas_on = 0;
+
 	/* Disable TDC first */
 	err = regmap_bulk_write(idtfc3->regmap, TIME_CLOCK_MEAS_CTRL, &val, sizeof(val));
 	if (err)
@@ -214,6 +184,8 @@ static int idtfc3_enable_tdc(struct idtfc3 *idtfc3, bool enable, u8 meas_mode)
 	err = regmap_bulk_write(idtfc3->regmap, TIME_CLOCK_MEAS_CTRL, &val, sizeof(val));
 	if (err)
 		return err;
+
+	idtfc3->tdc_meas_on = 1;
 
 	return idtfc3_lpf_bw(idtfc3, LPF_BW_SHIFT_1PPS, LPF_BW_MULT_1PPS);
 }
@@ -452,7 +424,7 @@ static int _idtfc3_adjtime(struct idtfc3 *idtfc3, s64 delta)
 
 	counter = sub_ns / idtfc3->ns_per_counter;
 	return idtfc3_timecounter_update(idtfc3, counter, idtfc3->ns + sync_ns +
-									counter * idtfc3->ns_per_counter);
+					 counter * idtfc3->ns_per_counter);
 }
 
 static int idtfc3_adjtime(struct ptp_clock_info *ptp, s64 delta)
@@ -590,14 +562,11 @@ static int idtfc3_enable(struct ptp_clock_info *ptp,
 static long idtfc3_aux_work(struct ptp_clock_info *ptp)
 {
 	struct idtfc3 *idtfc3 = container_of(ptp, struct idtfc3, caps);
-	static int tdc_get;
 
 	mutex_lock(idtfc3->lock);
-	tdc_get %= TDC_GET_PERIOD;
-	if ((tdc_get == 0) || (tdc_get == TDC_GET_PERIOD / 2))
-		idtfc3_timecounter_read(idtfc3);
-	get_tdc_meas_continuous(idtfc3);
-	tdc_get++;
+	idtfc3_timecounter_read(idtfc3);
+	if (idtfc3->tdc_meas_on)
+		get_tdc_meas_continuous(idtfc3);
 	mutex_unlock(idtfc3->lock);
 
 	return idtfc3->tc_update_period;
@@ -666,10 +635,14 @@ static int idtfc3_init_timecounter(struct idtfc3 *idtfc3)
 	int err;
 	u32 period_ms;
 
-	period_ms = idtfc3->sub_sync_count * MSEC_PER_SEC /
-			idtfc3->hw_param.time_clk_freq;
+	period_ms = idtfc3->sub_sync_count * MSEC_PER_SEC / idtfc3->hw_param.time_clk_freq;
+	if (period_ms < 10) {
+		dev_err(idtfc3->dev, "Time sync (%uHz) is too fast, max is 100Hz!\n",
+				NSEC_PER_SEC / idtfc3->ns_per_sync);
+		return -EINVAL;
+	}
 
-	idtfc3->tc_update_period = msecs_to_jiffies(period_ms / TDC_GET_PERIOD);
+	idtfc3->tc_update_period = msecs_to_jiffies(period_ms / 3);
 	idtfc3->tc_write_timeout = period_ms * USEC_PER_MSEC;
 
 	err = idtfc3_timecounter_update(idtfc3, 0, 0);
@@ -772,36 +745,27 @@ static int idtfc3_setup_hw_param(struct idtfc3 *idtfc3)
 	return idtfc3_get_tdc_apll_freq(idtfc3);
 }
 
-static int idtfc3_get_pll_status(struct idtfc3 *idtfc3, u8 *apll, u8 *dpll)
+static int idtfc3_get_pll_status(struct idtfc3 *idtfc3, u8 *apll)
 {
 	int err;
 
 	err = regmap_bulk_read(idtfc3->regmap, APLL_STS, apll, sizeof(u8));
-	if (err)
-		return err;
 
-	err = regmap_bulk_read(idtfc3->regmap, DPLL_STS, dpll, sizeof(u8));
-	if (err)
-		return err;
-
-	return 0;
+	return err;
 }
 
 static int wait_for_sys_apll_dpll_lock(struct idtfc3 *idtfc3)
 {
 	u8 apll = 0;
-	u8 dpll = 0;
 	int err;
 
-	err = read_poll_timeout_atomic(idtfc3_get_pll_status, err,
-				(apll & IDET_LOCK_STS) && (dpll & DPLL_LOCK_STS),
+	err = read_poll_timeout_atomic(idtfc3_get_pll_status, err, (apll & IDET_LOCK_STS),
 				LOCK_POLL_INTERVAL_MS * USEC_PER_MSEC,
 				LOCK_TIMEOUT_MS * USEC_PER_MSEC, false,
-				idtfc3, &apll, &dpll);
+				idtfc3, &apll);
 	if (err) {
 		dev_warn(idtfc3->dev,
-			 "%d ms lock timeout: SYS APLL status %x  SYS DPLL status %x",
-			 LOCK_TIMEOUT_MS, apll, dpll);
+			 "%d ms lock timeout: SYS APLL status %x", LOCK_TIMEOUT_MS, apll);
 		return err;
 	}
 
@@ -822,7 +786,7 @@ static int idtfc3_configure_hw(struct idtfc3 *idtfc3)
 	if (err)
 		return err;
 
-	err = idtfc3_get_tdc_offset_sign(idtfc3);
+	err = idtfc3_enable_tdc(idtfc3, false, MEAS_MODE_INVALID);
 	if (err)
 		return err;
 
@@ -938,8 +902,14 @@ static int idtfc3_load_firmware(struct idtfc3 *idtfc3)
 
 			err = idtfc3_set_hw_param(&idtfc3->hw_param, addr,
 					get_unaligned_be32((void *)rec));
-			if (err == 0)
+			if (err == 0) {
+				/*
+				 * Skip the next record because the whole record (4 Bytes) is
+				 * used to represent u32 value of the current record
+				 */
 				rec++;
+				len -= sizeof(*rec);
+			}
 		}
 
 		if (err != -EINVAL) {

@@ -1,6 +1,8 @@
-commit ca06f31e767a1f777ff1c249c756e39942994d76 (HEAD -> develop, origin/develop)
-Author: Min Li <min.li.xe@renesas.com>
-Date:   Wed Jul 31 16:01:05 2024 -0400
+Introduce FC3 PHC driver to github.
 
-    [STEELAI-798]: fix broken fc3 driver due to merging linux change
+commit 60239a8e4e9ccee99d008940cfe6751ec7da9ce9 (HEAD -> develop, origin/develop)
+Author: Min Li <min.li.xe@renesas.com>
+Date:   Thu Oct 17 13:31:55 2024 -0400
+
+    [STEELAI-860] fix firmware loading and disable tdc offset measurement at startup
 
