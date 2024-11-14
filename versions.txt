@@ -1,8 +1,8 @@
 Introduce FC3 PHC driver to github.
 
-commit 13c9db5b0b0d6242656fe97b8edd0556d119e613 (HEAD -> develop, origin/develop)
+commit 7e9326f71ff46acd8b3e1090b09d7a53941ddaf0
 Author: Min Li <min.li.xe@renesas.com>
-Date:   Fri Nov 1 11:08:20 2024 -0400
+Date:   Thu Nov 14 15:04:45 2024 -0500
 
-    [STEELAI-860] change fwrc interface to use reserved to indicate the record value length
+    FC3: make sure ptp_clock is registered in the last in idtfc3_probe
 

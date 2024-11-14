@@ -630,34 +630,6 @@ static int idtfc3_hw_calibrate(struct idtfc3 *idtfc3)
 	return err;
 }
 
-static int idtfc3_init_timecounter(struct idtfc3 *idtfc3)
-{
-	int err;
-	u32 period_ms;
-
-	period_ms = idtfc3->sub_sync_count * MSEC_PER_SEC / idtfc3->time_clk_freq;
-	if (period_ms < 10) {
-		dev_err(idtfc3->dev, "Time sync (%uHz) is too fast, max is 100Hz!\n",
-				NSEC_PER_SEC / idtfc3->ns_per_sync);
-		return -EINVAL;
-	}
-
-	idtfc3->tc_update_period = msecs_to_jiffies(period_ms / 3);
-	idtfc3->tc_write_timeout = period_ms * USEC_PER_MSEC;
-
-	err = idtfc3_timecounter_update(idtfc3, 0, 0);
-	if (err)
-		return err;
-
-	err = idtfc3_timecounter_read(idtfc3);
-	if (err)
-		return err;
-
-	ptp_schedule_worker(idtfc3->ptp_clock, idtfc3->tc_update_period);
-
-	return 0;
-}
-
 static int idtfc3_get_tdc_apll_freq(struct idtfc3 *idtfc3)
 {
 	int err;
@@ -950,9 +922,43 @@ static int idtfc3_set_overhead(struct idtfc3 *idtfc3)
 	return err;
 }
 
+static int idtfc3_init_timecounter(struct idtfc3 *idtfc3)
+{
+	int err;
+	u32 period_ms;
+
+	period_ms = idtfc3->sub_sync_count * MSEC_PER_SEC / idtfc3->time_clk_freq;
+	if (period_ms < 10) {
+		dev_err(idtfc3->dev, "Time sync (%uHz) is too fast, max is 100Hz!\n",
+				NSEC_PER_SEC / idtfc3->ns_per_sync);
+		return -EINVAL;
+	}
+
+	idtfc3->tc_update_period = msecs_to_jiffies(period_ms / 3);
+	idtfc3->tc_write_timeout = period_ms * USEC_PER_MSEC;
+
+	err = idtfc3_set_overhead(idtfc3);
+	if (err)
+		return err;
+
+	err = idtfc3_timecounter_update(idtfc3, 0, 0);
+	if (err)
+		return err;
+
+	err = idtfc3_timecounter_read(idtfc3);
+	if (err)
+		return err;
+
+	return 0;
+}
+
 static int idtfc3_enable_ptp(struct idtfc3 *idtfc3)
 {
 	int err;
+
+	err = idtfc3_init_timecounter(idtfc3);
+	if (err)
+		return err;
 
 	idtfc3->caps = idtfc3_caps;
 	snprintf(idtfc3->caps.name, sizeof(idtfc3->caps.name), "IDT FC3W");
@@ -964,17 +970,10 @@ static int idtfc3_enable_ptp(struct idtfc3 *idtfc3)
 		return err;
 	}
 
-	err = idtfc3_set_overhead(idtfc3);
-	if (err)
-		return err;
-
-	err = idtfc3_init_timecounter(idtfc3);
-	if (err)
-		return err;
+	ptp_schedule_worker(idtfc3->ptp_clock, idtfc3->tc_update_period);
 
 	dev_info(idtfc3->dev, "TIME_SYNC_CHANNEL (Time Clock %uHz) registered as ptp%d",
 			      idtfc3->time_clk_freq, idtfc3->ptp_clock->index);
-
 	return 0;
 }
 
@@ -1040,8 +1039,6 @@ static int idtfc3_load_firmware(struct idtfc3 *idtfc3)
 		if (err)
 			goto out;
 	}
-
-	err = idtfc3_configure_hw(idtfc3);
 out:
 	release_firmware(fw);
 	return err;
@@ -1074,7 +1071,7 @@ static int idtfc3_check_device_compatibility(struct idtfc3 *idtfc3)
 		return err;
 
 	if ((device_id & DEVICE_ID_MASK) == 0) {
-		dev_err(idtfc3->dev, "invalid device");
+		dev_err(idtfc3->dev, "invalid device, only FC3W is supported");
 		return -EINVAL;
 	}
 
@@ -1100,10 +1097,8 @@ static int idtfc3_probe(struct platform_device *pdev)
 	mutex_lock(idtfc3->lock);
 
 	err = idtfc3_check_device_compatibility(idtfc3);
-	if (err) {
-		mutex_unlock(idtfc3->lock);
-		return err;
-	}
+	if (err)
+		goto exit;
 
 	err = idtfc3_load_firmware(idtfc3);
 	if (err) {
@@ -1114,30 +1109,33 @@ static int idtfc3_probe(struct platform_device *pdev)
 		dev_warn(idtfc3->dev, "loading firmware failed with %d", err);
 	}
 
+	err = idtfc3_configure_hw(idtfc3);
+	if (err) {
+		dev_err(idtfc3->dev, "idtfc3_configure_hw failed with %d", err);
+		goto exit;
+	}
+
 	err = idtfc3_enable_ptp(idtfc3);
 	if (err) {
 		dev_err(idtfc3->dev, "idtfc3_enable_ptp failed with %d", err);
-		mutex_unlock(idtfc3->lock);
-		return err;
-	}
-
-	mutex_unlock(idtfc3->lock);
-
-	if (err) {
-		ptp_clock_unregister(idtfc3->ptp_clock);
-		return err;
+		goto exit;
 	}
 
 	platform_set_drvdata(pdev, idtfc3);
 
-	return 0;
+exit:
+	mutex_unlock(idtfc3->lock);
+	if (err && idtfc3->ptp_clock)
+		ptp_clock_unregister(idtfc3->ptp_clock);
+	return err;
 }
 
 static int idtfc3_remove(struct platform_device *pdev)
 {
 	struct idtfc3 *idtfc3 = platform_get_drvdata(pdev);
 
-	ptp_clock_unregister(idtfc3->ptp_clock);
+	if (idtfc3->ptp_clock)
+		ptp_clock_unregister(idtfc3->ptp_clock);
 
 	return 0;
 }
