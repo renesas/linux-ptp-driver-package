@@ -31,8 +31,8 @@ struct idtfc3 {
 	u32			ns_per_sync;
 	int			tdc_meas_on;
 	u64			tdc_apll_freq;
+	u32			time_clk_freq;
 	u32			time_ref_freq;
-	u16			fod_n;
 	u8			lpf_mode;
 	/* Time counter */
 	u32			last_counter;

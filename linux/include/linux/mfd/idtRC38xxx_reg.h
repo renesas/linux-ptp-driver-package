@@ -22,6 +22,11 @@
 #define APLL_STS	(0xBD)
 #define IDET_LOCK_STS	BIT(0)
 
+#define APLL_FB_DIV_FRAC_CNFG (0x90)
+#define APLL_FB_DIV_FRAC_MASK		GENMASK(37, 0)
+#define APLL_FB_DIV_INT_CNFG (0x98)
+#define APLL_FB_DIV_INT_MASK		GENMASK(9, 0)
+
 /* FOD */
 #define FOD_0		(0x300)
 #define FOD_0_VFC3A	(0x400)
@@ -29,6 +34,21 @@
 #define FOD_1_VFC3A	(0x440)
 #define FOD_2		(0x380)
 #define FOD_2_VFC3A	(0x480)
+
+#define FOD_CNFG (0x0)
+#define FOD_INTEGER_MODE BIT(0)
+#define FOD_SYNC_MODE BIT(1)
+enum {
+	FOD_MODE_INTEGER		= 0,
+	FOD_MODE_SYNCHRONOUS	= 1,
+	FOD_MODE_SYNTHESIZER	= 2,
+	FOD_MODE_DCO			= 3,
+	FOD_MODE_MAX
+};
+
+#define FOD_DIV_CNFG	(0x18)
+#define FOD_DIV_FRACTION	GENMASK(39, 0)
+#define FOD_DIV_INTEGER		GENMASK(48, 40)
 
 /* TDCAPLL */
 #define TDC_CTRL		(0x44a) /* Specific to FC3W */
@@ -44,6 +64,7 @@
 #define TDC_REF_DIV_CNFG		(0x443)
 #define TDC_REF_DIV_CNFG_VFC3A		(0x163)
 #define TDC_REF_DIV_CONFIG_MASK		GENMASK(2, 0)
+#define TDC_REF_SEL				BIT(4)
 
 /* TIME SYNC CHANNEL */
 #define TIME_CLOCK_SRC		(0xa01) /* Specific to FC3W */
@@ -204,8 +225,22 @@ enum dpll_state {
 #define FREQMON_STS_3_VFC3A	(0x234)
 #define FREQ_FAIL_STS_SHIFT	(31)
 
+/* Clock limits */
+#define TDC_REF_FREQ_HZ			12800000
+#define XTAL_FREQ_HZ			50000000
+#define MIN_XTAL_FREQ_HZ		20000000
+#define MAX_XTAL_FREQ_HZ		150000000
+#define MAX_VCO_CLK_HZ			10750000000ULL
+#define MIN_VCO_CLK_HZ			9700000000ULL
+#define MIN_TDC_APLL_FREQ_HZ	840000000ULL
+#define MAX_TDC_APLL_FREQ_HZ	900000000ULL
+#define MIN_TDC_REF_FREQ_HZ		10000000
+#define MAX_TDC_REF_FREQ_HZ		30000000
+#define MIN_FOD_FREQ_HZ			100000000
+#define MAX_FOD_FREQ_HZ			625000000
+
 /* Firmware interface */
-#define TIME_CLK_FREQ_ADDR	(0xffa0)
+#define XTAL_FREQ_ADDR		(0xffa0)
 #define TDC_REF_FREQ_ADDR	(0xffa1)
 
 /*
@@ -222,7 +257,7 @@ enum fw_version {
 
 struct idtfc3_hw_param {
 	u32 tdc_ref_freq;
-	u32 time_clk_freq;
+	u32 xtal_freq;
 };
 
 struct idtfc3_fwrc {
@@ -234,8 +269,8 @@ struct idtfc3_fwrc {
 
 static inline void idtfc3_default_hw_param(struct idtfc3_hw_param *hw_param)
 {
-	hw_param->tdc_ref_freq = 49152000;
-	hw_param->time_clk_freq = 25000000;
+	hw_param->tdc_ref_freq = TDC_REF_FREQ_HZ;
+	hw_param->xtal_freq = XTAL_FREQ_HZ;
 }
 
 static inline int idtfc3_set_hw_param(struct idtfc3_hw_param *hw_param,
@@ -243,14 +278,14 @@ static inline int idtfc3_set_hw_param(struct idtfc3_hw_param *hw_param,
 {
 	if (addr == TDC_REF_FREQ_ADDR) {
 		/* The supported frequency range is 10MHz to 80MHz */
-		if (val > 80000000 || val < 10000000)
+		if (val > MAX_TDC_REF_FREQ_HZ || val < MIN_TDC_REF_FREQ_HZ)
 			return -EINVAL;
 		hw_param->tdc_ref_freq = val;
-	} else if (addr == TIME_CLK_FREQ_ADDR) {
-		/* Time clock period must be whole nanoseconds */
-		if (NSEC_PER_SEC % val)
+	} else if (addr == XTAL_FREQ_ADDR) {
+		/* The supported frequency range is 10MHz to 80MHz */
+		if (val > MAX_XTAL_FREQ_HZ || val < MIN_XTAL_FREQ_HZ)
 			return -EINVAL;
-		hw_param->time_clk_freq = val;
+		hw_param->xtal_freq = val;
 	} else
 		return -EFAULT;
 

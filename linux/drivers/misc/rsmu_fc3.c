@@ -74,6 +74,7 @@ static int rsmu_get_tdc_apll_freq(struct rsmu_cdev *rsmu)
 	int err;
 	u8 tdc_fb_div_int;
 	u8 tdc_ref_div;
+	u32 tdc_ref_freq = HW_PARAM(rsmu)->xtal_freq;
 
 	err = regmap_bulk_read(rsmu->regmap, TDC_REF_DIV_CNFG,
 				&tdc_ref_div, sizeof(tdc_ref_div));
@@ -85,13 +86,152 @@ static int rsmu_get_tdc_apll_freq(struct rsmu_cdev *rsmu)
 	if (err)
 		return err;
 
+	if (tdc_ref_div & TDC_REF_SEL)
+		tdc_ref_freq = HW_PARAM(rsmu)->tdc_ref_freq;
+
 	tdc_fb_div_int &= TDC_FB_DIV_INT_MASK;
 	tdc_ref_div &= TDC_REF_DIV_CONFIG_MASK;
 
-	TDC_APLL(rsmu) = div_u64(HW_PARAM(rsmu)->tdc_ref_freq *
-				 (u64)tdc_fb_div_int, 1 << tdc_ref_div);
+	TDC_APLL(rsmu) = div_u64(tdc_ref_freq * (u64)tdc_fb_div_int, 1 << tdc_ref_div);
 
 	return 0;
+}
+
+static s64 rsmu_get_vco_freq(struct rsmu_cdev *rsmu)
+{
+	int err;
+	u8 buf[8];
+	u16 div_int;
+	u64 div_frac;
+	u64 vco_freq;
+	u64 xtal_freq = HW_PARAM(rsmu)->xtal_freq;
+
+	err = regmap_bulk_read(rsmu->regmap, APLL_FB_DIV_FRAC_CNFG, buf, sizeof(buf));
+	if (err)
+		return err;
+	div_frac = get_unaligned_le64(buf) & APLL_FB_DIV_FRAC_MASK;
+
+	err = regmap_bulk_read(rsmu->regmap, APLL_FB_DIV_INT_CNFG, buf, 2);
+	if (err)
+		return err;
+	div_int = get_unaligned_le16(buf) & APLL_FB_DIV_INT_MASK;
+
+	vco_freq = (xtal_freq * div_int) +
+		   mul_u64_u64_div_u64(xtal_freq, div_frac, 1ULL << 38);
+	if ((vco_freq < MIN_VCO_CLK_HZ) || (vco_freq > MAX_VCO_CLK_HZ)) {
+		dev_err(rsmu->dev, "vco_freq out of range %llu!\n", vco_freq);
+		return -ERANGE;
+	}
+
+	return (s64)vco_freq;
+}
+
+static s64 rsmu_get_fod_freq(struct rsmu_cdev *rsmu, u8 fod_n)
+{
+	int err;
+	u8 buf[8];
+	s64 vco_freq;
+	u16 cnfg, div_int;
+	u64 div_cnfg, div_frac, fod_freq;
+	u16 base = FOD_0 + fod_n * 0x40;
+	int mode = FOD_MODE_SYNTHESIZER;
+
+	if (fod_n > 2) {
+		dev_err(rsmu->dev, "Invalid FOD index %u!\n", fod_n);
+		return -EINVAL;
+	}
+
+	/* Get VCO frequency */
+	vco_freq = rsmu_get_vco_freq(rsmu);
+	if (vco_freq < 0)
+		return vco_freq;
+
+	/* Get FOD mode */
+	err = regmap_bulk_read(rsmu->regmap, base + FOD_CNFG, buf, 2);
+	if (err)
+		return err;
+
+	cnfg = get_unaligned_le16(buf);
+	if (cnfg & FOD_SYNC_MODE)
+		mode = FOD_MODE_SYNCHRONOUS;
+	if (cnfg & FOD_INTEGER_MODE)
+		mode = FOD_MODE_INTEGER;
+
+	/* Get FOD DIV fraction and integer */
+	err = regmap_bulk_read(rsmu->regmap, base + FOD_DIV_CNFG, buf, 8);
+	if (err)
+		return err;
+
+	div_cnfg = get_unaligned_le64(buf);
+	div_frac = FIELD_GET(FOD_DIV_FRACTION, div_cnfg);
+	div_int = FIELD_GET(FOD_DIV_INTEGER, div_cnfg);
+	if (div_int < 4 || div_int > 510) {
+		dev_err(rsmu->dev, "Invalid fod_div_integer %u!\n", div_int);
+		return -EINVAL;
+	}
+
+	/* Calculate FOD frequency */
+	switch (mode) {
+	case FOD_MODE_INTEGER:
+		/*
+		 *             VCO_freq
+		 * FOD freq = ----------
+		 *               int
+		 */
+		fod_freq = div_u64(vco_freq, div_int);
+		break;
+	case FOD_MODE_SYNTHESIZER:
+		/*
+		 *                2^40 * VCO_freq
+		 * FOD freq = -------------------------
+		 *             (2^40 * int) + fraction
+		 */
+		fod_freq = mul_u64_u64_div_u64(vco_freq, 1ULL << 40,
+					       (1ULL << 40) * div_int + div_frac);
+		break;
+	default:
+		dev_err(rsmu->dev, "fod_mode %u is not supported\n", mode);
+		return -EOPNOTSUPP;
+	}
+
+	if ((fod_freq > MAX_FOD_FREQ_HZ) || (fod_freq < MIN_FOD_FREQ_HZ)) {
+		dev_err(rsmu->dev, "Invalid FOD frequency %lluHz\n", fod_freq);
+		return -EINVAL;
+	}
+
+	return (s64)fod_freq;
+}
+
+static s64 rsmu_get_time_clk_freq(struct rsmu_cdev *rsmu)
+{
+	int err;
+	u8 val, time_clk_div;
+	s64 fod_freq, time_clk_freq;
+	u32 rem;
+
+	err = regmap_bulk_read(rsmu->regmap, TIME_CLOCK_SRC, &val, sizeof(val));
+	if (err)
+		return err;
+
+	fod_freq = rsmu_get_fod_freq(rsmu, val);
+	if (fod_freq < 0)
+		return fod_freq;
+
+	err = regmap_bulk_read(rsmu->regmap, TIME_CLOCK_COUNT, &val, sizeof(val));
+	if (err)
+		return err;
+	time_clk_div = (val & TIME_CLOCK_COUNT_MASK) + 1;
+
+	time_clk_freq = div_u64_rem(fod_freq, time_clk_div, &rem);
+
+	if (rem) {
+		dev_err(rsmu->dev,
+			"FOD frequency (%lld) is not divisible by time clock divider (%u)\n",
+			fod_freq, time_clk_div);
+		err = -EINVAL;
+	}
+
+	return time_clk_freq;
 }
 
 static int rsmu_get_time_ref_freq(struct rsmu_cdev *rsmu)
@@ -100,6 +240,11 @@ static int rsmu_get_time_ref_freq(struct rsmu_cdev *rsmu)
 	u8 buf[4];
 	u8 time_ref_div;
 	u8 time_clk_div;
+	s64 time_clk_freq;
+
+	time_clk_freq = rsmu_get_time_clk_freq(rsmu);
+	if (time_clk_freq < 0)
+		return time_clk_freq;
 
 	err = regmap_bulk_read(rsmu->regmap, TIME_CLOCK_MEAS_DIV_CNFG, buf, sizeof(buf));
 	if (err)
@@ -110,7 +255,7 @@ static int rsmu_get_time_ref_freq(struct rsmu_cdev *rsmu)
 	if (err)
 		return err;
 	time_clk_div = (buf[0] & TIME_CLOCK_COUNT_MASK) + 1;
-	TIME_REF(rsmu) = HW_PARAM(rsmu)->time_clk_freq * time_clk_div / time_ref_div;
+	TIME_REF(rsmu) = div_u64(time_clk_freq * (u64)time_clk_div, time_ref_div);
 
 	return 0;
 }

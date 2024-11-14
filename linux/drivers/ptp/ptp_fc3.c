@@ -127,8 +127,8 @@ static int idtfc3_get_time_ref_freq(struct idtfc3 *idtfc3)
 	if (err)
 		return err;
 	time_clk_div = (buf[0] & TIME_CLOCK_COUNT_MASK) + 1;
-	idtfc3->time_ref_freq = idtfc3->hw_param.time_clk_freq *
-				time_clk_div / time_ref_div;
+	idtfc3->time_ref_freq = div_u64(idtfc3->time_clk_freq * (u64)time_clk_div,
+					time_ref_div);
 
 	return 0;
 }
@@ -635,7 +635,7 @@ static int idtfc3_init_timecounter(struct idtfc3 *idtfc3)
 	int err;
 	u32 period_ms;
 
-	period_ms = idtfc3->sub_sync_count * MSEC_PER_SEC / idtfc3->hw_param.time_clk_freq;
+	period_ms = idtfc3->sub_sync_count * MSEC_PER_SEC / idtfc3->time_clk_freq;
 	if (period_ms < 10) {
 		dev_err(idtfc3->dev, "Time sync (%uHz) is too fast, max is 100Hz!\n",
 				NSEC_PER_SEC / idtfc3->ns_per_sync);
@@ -663,7 +663,7 @@ static int idtfc3_get_tdc_apll_freq(struct idtfc3 *idtfc3)
 	int err;
 	u8 tdc_fb_div_int;
 	u8 tdc_ref_div;
-	struct idtfc3_hw_param *param = &idtfc3->hw_param;
+	u32 tdc_ref_freq = idtfc3->hw_param.xtal_freq;
 
 	err = regmap_bulk_read(idtfc3->regmap, TDC_REF_DIV_CNFG,
 				&tdc_ref_div, sizeof(tdc_ref_div));
@@ -675,39 +675,120 @@ static int idtfc3_get_tdc_apll_freq(struct idtfc3 *idtfc3)
 	if (err)
 		return err;
 
+	if (tdc_ref_div & TDC_REF_SEL)
+		tdc_ref_freq = idtfc3->hw_param.tdc_ref_freq;
+
 	tdc_fb_div_int &= TDC_FB_DIV_INT_MASK;
 	tdc_ref_div &= TDC_REF_DIV_CONFIG_MASK;
 
-	idtfc3->tdc_apll_freq = div_u64(param->tdc_ref_freq * (u64)tdc_fb_div_int,
-					1 << tdc_ref_div);
+	idtfc3->tdc_apll_freq = div_u64(tdc_ref_freq * (u64)tdc_fb_div_int, 1 << tdc_ref_div);
 
 	return 0;
 }
 
-static int idtfc3_get_fod(struct idtfc3 *idtfc3)
+static s64 idtfc3_get_vco_freq(struct idtfc3 *idtfc3)
 {
 	int err;
-	u8 fod;
+	u8 buf[8];
+	u16 div_int;
+	u64 div_frac;
+	u64 vco_freq;
+	u64 xtal_freq = idtfc3->hw_param.xtal_freq;
 
-	err = regmap_bulk_read(idtfc3->regmap, TIME_CLOCK_SRC, &fod, sizeof(fod));
+	err = regmap_bulk_read(idtfc3->regmap, APLL_FB_DIV_FRAC_CNFG, buf, sizeof(buf));
 	if (err)
 		return err;
+	div_frac = get_unaligned_le64(buf) & APLL_FB_DIV_FRAC_MASK;
 
-	switch (fod) {
-	case 0:
-		idtfc3->fod_n = FOD_0;
-		break;
-	case 1:
-		idtfc3->fod_n = FOD_1;
-		break;
-	case 2:
-		idtfc3->fod_n = FOD_2;
-		break;
-	default:
+	err = regmap_bulk_read(idtfc3->regmap, APLL_FB_DIV_INT_CNFG, buf, 2);
+	if (err)
+		return err;
+	div_int = get_unaligned_le16(buf) & APLL_FB_DIV_INT_MASK;
+
+	vco_freq = (xtal_freq * div_int) +
+		   mul_u64_u64_div_u64(xtal_freq, div_frac, 1ULL << 38);
+	if ((vco_freq < MIN_VCO_CLK_HZ) || (vco_freq > MAX_VCO_CLK_HZ)) {
+		dev_err(idtfc3->dev, "vco_freq out of range %llu!\n", vco_freq);
+		return -ERANGE;
+	}
+
+	return (s64)vco_freq;
+}
+
+static s64 idtfc3_get_fod_freq(struct idtfc3 *idtfc3, u8 fod_n)
+{
+	int err;
+	u8 buf[8];
+	s64 vco_freq;
+	u16 cnfg, div_int;
+	u64 div_cnfg, div_frac, fod_freq;
+	u16 base = FOD_0 + fod_n * 0x40;
+	int mode = FOD_MODE_SYNTHESIZER;
+
+	if (fod_n > 2) {
+		dev_err(idtfc3->dev, "Invalid FOD index %u!\n", fod_n);
 		return -EINVAL;
 	}
 
-	return 0;
+	/* Get VCO frequency */
+	vco_freq = idtfc3_get_vco_freq(idtfc3);
+	if (vco_freq < 0)
+		return vco_freq;
+
+	/* Get FOD mode */
+	err = regmap_bulk_read(idtfc3->regmap, base + FOD_CNFG, buf, 2);
+	if (err)
+		return err;
+
+	cnfg = get_unaligned_le16(buf);
+	if (cnfg & FOD_SYNC_MODE)
+		mode = FOD_MODE_SYNCHRONOUS;
+	if (cnfg & FOD_INTEGER_MODE)
+		mode = FOD_MODE_INTEGER;
+
+	/* Get FOD DIV fraction and integer */
+	err = regmap_bulk_read(idtfc3->regmap, base + FOD_DIV_CNFG, buf, 8);
+	if (err)
+		return err;
+
+	div_cnfg = get_unaligned_le64(buf);
+	div_frac = FIELD_GET(FOD_DIV_FRACTION, div_cnfg);
+	div_int = FIELD_GET(FOD_DIV_INTEGER, div_cnfg);
+	if (div_int < 4 || div_int > 510) {
+		dev_err(idtfc3->dev, "Invalid fod_div_integer %u!\n", div_int);
+		return -EINVAL;
+	}
+
+	/* Calculate FOD frequency */
+	switch (mode) {
+	case FOD_MODE_INTEGER:
+		/*
+		 *             VCO_freq
+		 * FOD freq = ----------
+		 *               int
+		 */
+		fod_freq = div_u64(vco_freq, div_int);
+		break;
+	case FOD_MODE_SYNTHESIZER:
+		/*
+		 *                2^40 * VCO_freq
+		 * FOD freq = -------------------------
+		 *             (2^40 * int) + fraction
+		 */
+		fod_freq = mul_u64_u64_div_u64(vco_freq, 1ULL << 40,
+					       (1ULL << 40) * div_int + div_frac);
+		break;
+	default:
+		dev_err(idtfc3->dev, "fod_mode %u is not supported\n", mode);
+		return -EOPNOTSUPP;
+	}
+
+	if ((fod_freq > MAX_FOD_FREQ_HZ) || (fod_freq < MIN_FOD_FREQ_HZ)) {
+		dev_err(idtfc3->dev, "Invalid FOD frequency %lluHz\n", fod_freq);
+		return -EINVAL;
+	}
+
+	return (s64)fod_freq;
 }
 
 static int idtfc3_get_sync_count(struct idtfc3 *idtfc3)
@@ -720,17 +801,54 @@ static int idtfc3_get_sync_count(struct idtfc3 *idtfc3)
 		return err;
 
 	idtfc3->sub_sync_count = (get_unaligned_le32(buf) & SUB_SYNC_COUNTER_MASK) + 1;
-	idtfc3->ns_per_counter = NSEC_PER_SEC / idtfc3->hw_param.time_clk_freq;
+	idtfc3->ns_per_counter = NSEC_PER_SEC / idtfc3->time_clk_freq;
 	idtfc3->ns_per_sync = idtfc3->sub_sync_count * idtfc3->ns_per_counter;
 
-	return 0;
+	if (NSEC_PER_SEC % idtfc3->time_clk_freq) {
+		dev_err(idtfc3->dev, "Time clock (%uHz) period must be whole nanoseconds\n",
+				idtfc3->time_clk_freq);
+		err = -EINVAL;
+	}
+
+	return err;
+}
+
+static int idtfc3_get_time_clk_freq(struct idtfc3 *idtfc3)
+{
+	int err;
+	u8 val, time_clk_div;
+	s64 fod_freq;
+	u32 rem;
+
+	err = regmap_bulk_read(idtfc3->regmap, TIME_CLOCK_SRC, &val, sizeof(val));
+	if (err)
+		return err;
+
+	fod_freq = idtfc3_get_fod_freq(idtfc3, val);
+	if (fod_freq < 0)
+		return fod_freq;
+
+	err = regmap_bulk_read(idtfc3->regmap, TIME_CLOCK_COUNT, &val, sizeof(val));
+	if (err)
+		return err;
+	time_clk_div = (val & TIME_CLOCK_COUNT_MASK) + 1;
+
+	idtfc3->time_clk_freq = div_u64_rem(fod_freq, time_clk_div, &rem);
+
+	if (rem) {
+		dev_err(idtfc3->dev,
+			    "FOD frequency (%lld) is not divisible by time clock divider (%u)\n",
+			    fod_freq, time_clk_div);
+	}
+
+	return err;
 }
 
 static int idtfc3_setup_hw_param(struct idtfc3 *idtfc3)
 {
 	int err;
 
-	err = idtfc3_get_fod(idtfc3);
+	err = idtfc3_get_time_clk_freq(idtfc3);
 	if (err)
 		return err;
 
@@ -854,8 +972,8 @@ static int idtfc3_enable_ptp(struct idtfc3 *idtfc3)
 	if (err)
 		return err;
 
-	dev_info(idtfc3->dev, "TIME_SYNC_CHANNEL registered as ptp%d",
-		 idtfc3->ptp_clock->index);
+	dev_info(idtfc3->dev, "TIME_SYNC_CHANNEL (Time Clock %uHz) registered as ptp%d",
+			      idtfc3->time_clk_freq, idtfc3->ptp_clock->index);
 
 	return 0;
 }
