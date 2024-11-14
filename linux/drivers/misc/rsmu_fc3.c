@@ -412,22 +412,24 @@ static int load_firmware(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 	dev_dbg(rsmu->dev, "firmware size %zu bytes\n", fw->size);
 
 	rec = (struct idtfc3_fwrc *) fw->data;
+	if (rec->length == 0)
+		dev_warn(rsmu->dev, "%s is outdated, proceeding anyways !!!", fname);
 
 	for (len = fw->size; len > 0; len -= sizeof(*rec)) {
-		if (rec->reserved) {
-			dev_err(rsmu->dev,
-				"bad firmware, reserved field non-zero\n");
-			err = -EINVAL;
-		} else {
-			val = rec->value;
-			addr = rec->hiaddr << 8 | rec->loaddr;
+		val = rec->value;
+		addr = rec->hiaddr << 8 | rec->loaddr;
 
+		rec++;
+
+		err = idtfc3_set_hw_param(HW_PARAM(rsmu), addr,
+					  get_unaligned_be32((void *)rec));
+		if (err == 0) {
+			/*
+			 * Skip the next record because the whole record (4 Bytes) is
+			 * used to represent u32 value of the current record
+			 */
 			rec++;
-
-			err = idtfc3_set_hw_param(HW_PARAM(rsmu), addr,
-						  get_unaligned_be32((void *)rec));
-			if (err == 0)
-				rec++;
+			len -= sizeof(*rec);
 		}
 
 		if (err != -EINVAL) {

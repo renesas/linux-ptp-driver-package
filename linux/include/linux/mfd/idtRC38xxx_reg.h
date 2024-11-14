@@ -22,10 +22,10 @@
 #define APLL_STS	(0xBD)
 #define IDET_LOCK_STS	BIT(0)
 
-#define APLL_FB_DIV_FRAC_CNFG (0x90)
-#define APLL_FB_DIV_FRAC_MASK		GENMASK(37, 0)
-#define APLL_FB_DIV_INT_CNFG (0x98)
-#define APLL_FB_DIV_INT_MASK		GENMASK(9, 0)
+#define APLL_FB_DIV_FRAC_CNFG	(0x90)
+#define APLL_FB_DIV_FRAC_MASK	GENMASK(37, 0)
+#define APLL_FB_DIV_INT_CNFG	(0x98)
+#define APLL_FB_DIV_INT_MASK	GENMASK(9, 0)
 
 /* FOD */
 #define FOD_0		(0x300)
@@ -39,14 +39,14 @@
 #define FOD_INTEGER_MODE BIT(0)
 #define FOD_SYNC_MODE BIT(1)
 enum {
-	FOD_MODE_INTEGER		= 0,
+	FOD_MODE_INTEGER	= 0,
 	FOD_MODE_SYNCHRONOUS	= 1,
 	FOD_MODE_SYNTHESIZER	= 2,
-	FOD_MODE_DCO			= 3,
+	FOD_MODE_DCO		= 3,
 	FOD_MODE_MAX
 };
 
-#define FOD_DIV_CNFG	(0x18)
+#define FOD_DIV_CNFG		(0x18)
 #define FOD_DIV_FRACTION	GENMASK(39, 0)
 #define FOD_DIV_INTEGER		GENMASK(48, 40)
 
@@ -64,7 +64,7 @@ enum {
 #define TDC_REF_DIV_CNFG		(0x443)
 #define TDC_REF_DIV_CNFG_VFC3A		(0x163)
 #define TDC_REF_DIV_CONFIG_MASK		GENMASK(2, 0)
-#define TDC_REF_SEL				BIT(4)
+#define TDC_REF_SEL			BIT(4)
 
 /* TIME SYNC CHANNEL */
 #define TIME_CLOCK_SRC		(0xa01) /* Specific to FC3W */
@@ -103,9 +103,9 @@ enum lpf_mode {
 
 #define LPF_BW_CNFG	(0xa81)
 #define LPF_BW_SHIFT	GENMASK(7, 3)
-#define LPF_BW_MULT		GENMASK(2, 0)
+#define LPF_BW_MULT	GENMASK(2, 0)
 /* 100mHz */
-#define LPF_BW_SHIFT_DEFAULT	(0x6)
+#define LPF_BW_SHIFT_DEFAULT		(0x6)
 #define LPF_BW_MULT_DEFAULT		(0x4)
 /* 20mHz */
 #define LPF_BW_SHIFT_1PPS		(0x4)
@@ -117,9 +117,9 @@ enum lpf_mode {
 #define LPF_WR_FREQ_CTRL_VFC3A	(0x730)
 
 #define TIME_CLOCK_TDC_FANOUT_CNFG	(0xB00)
-#define TIME_SYNC_TO_TDC_EN	BIT(0)
-#define SIG1_MUX_SEL_MASK	GENMASK(7, 4)
-#define SIG2_MUX_SEL_MASK	GENMASK(11, 8)
+#define TIME_SYNC_TO_TDC_EN		BIT(0)
+#define SIG1_MUX_SEL_MASK		GENMASK(7, 4)
+#define SIG2_MUX_SEL_MASK		GENMASK(11, 8)
 enum tdc_mux_sel {
 	REF0 = 0,
 	REF1 = 1,
@@ -134,7 +134,7 @@ enum tdc_mux_sel {
 };
 
 #define TIME_CLOCK_MEAS_CNFG	(0xB04)
-#define TDC_MEAS_MODE	BIT(0)
+#define TDC_MEAS_MODE		BIT(0)
 enum tdc_meas_mode {
 	CONTINUOUS = 0,
 	ONE_SHOT = 1,
@@ -142,11 +142,11 @@ enum tdc_meas_mode {
 };
 
 #define TIME_CLOCK_MEAS_DIV_CNFG	(0xB08)
-#define TIME_REF_DIV_MASK	GENMASK(29, 24)
+#define TIME_REF_DIV_MASK		GENMASK(29, 24)
 
 #define TIME_CLOCK_MEAS_CTRL	(0xB10)
-#define TDC_MEAS_EN	BIT(0)
-#define TDC_MEAS_START	BIT(1)
+#define TDC_MEAS_EN		BIT(0)
+#define TDC_MEAS_START		BIT(1)
 
 #define TDC_FIFO_READ_REQ	(0xB2F)
 #define TDC_FIFO_READ		(0xB30)
@@ -232,8 +232,8 @@ enum dpll_state {
 #define MAX_XTAL_FREQ_HZ		150000000
 #define MAX_VCO_CLK_HZ			10750000000ULL
 #define MIN_VCO_CLK_HZ			9700000000ULL
-#define MIN_TDC_APLL_FREQ_HZ	840000000ULL
-#define MAX_TDC_APLL_FREQ_HZ	900000000ULL
+#define MIN_TDC_APLL_FREQ_HZ		840000000ULL
+#define MAX_TDC_APLL_FREQ_HZ		900000000ULL
 #define MIN_TDC_REF_FREQ_HZ		10000000
 #define MAX_TDC_REF_FREQ_HZ		30000000
 #define MIN_FOD_FREQ_HZ			100000000
@@ -261,10 +261,11 @@ struct idtfc3_hw_param {
 };
 
 struct idtfc3_fwrc {
-	u8 hiaddr;
-	u8 loaddr;
-	u8 value;
-	u8 reserved;
+	uint8_t hiaddr;
+	uint8_t loaddr;
+	uint8_t value;
+	uint8_t length;
+	uint8_t record[];
 } __packed;
 
 static inline void idtfc3_default_hw_param(struct idtfc3_hw_param *hw_param)

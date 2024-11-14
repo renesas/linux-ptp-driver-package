@@ -1,8 +1,8 @@
 Introduce FC3 PHC driver to github.
 
-commit 60239a8e4e9ccee99d008940cfe6751ec7da9ce9 (HEAD -> develop, origin/develop)
+commit 13c9db5b0b0d6242656fe97b8edd0556d119e613 (HEAD -> develop, origin/develop)
 Author: Min Li <min.li.xe@renesas.com>
-Date:   Thu Oct 17 13:31:55 2024 -0400
+Date:   Fri Nov 1 11:08:20 2024 -0400
 
-    [STEELAI-860] fix firmware loading and disable tdc offset measurement at startup
+    [STEELAI-860] change fwrc interface to use reserved to indicate the record value length
 

@@ -806,7 +806,7 @@ static int idtfc3_get_sync_count(struct idtfc3 *idtfc3)
 
 	if (NSEC_PER_SEC % idtfc3->time_clk_freq) {
 		dev_err(idtfc3->dev, "Time clock (%uHz) period must be whole nanoseconds\n",
-				idtfc3->time_clk_freq);
+			idtfc3->time_clk_freq);
 		err = -EINVAL;
 	}
 
@@ -837,8 +837,8 @@ static int idtfc3_get_time_clk_freq(struct idtfc3 *idtfc3)
 
 	if (rem) {
 		dev_err(idtfc3->dev,
-			    "FOD frequency (%lld) is not divisible by time clock divider (%u)\n",
-			    fod_freq, time_clk_div);
+			"FOD frequency (%lld) is not divisible by time clock divider (%u)\n",
+			fod_freq, time_clk_div);
 	}
 
 	return err;
@@ -1006,28 +1006,24 @@ static int idtfc3_load_firmware(struct idtfc3 *idtfc3)
 	dev_dbg(idtfc3->dev, "firmware size %zu bytes\n", fw->size);
 
 	rec = (struct idtfc3_fwrc *)fw->data;
+	if (rec->length == 0)
+		dev_warn(idtfc3->dev, "%s is outdated, proceeding anyways !!!", firmware);
 
 	for (len = fw->size; len > 0; len -= sizeof(*rec)) {
-		if (rec->reserved) {
-			dev_err(idtfc3->dev,
-				"bad firmware, reserved field non-zero\n");
-			err = -EINVAL;
-		} else {
-			val = rec->value;
-			addr = rec->hiaddr << 8 | rec->loaddr;
+		val = rec->value;
+		addr = rec->hiaddr << 8 | rec->loaddr;
 
+		rec++;
+
+		err = idtfc3_set_hw_param(&idtfc3->hw_param, addr,
+				get_unaligned_be32((void *)rec));
+		if (err == 0) {
+			/*
+			 * Skip the next record because the whole record (4 Bytes) is
+			 * used to represent u32 value of the current record
+			 */
 			rec++;
-
-			err = idtfc3_set_hw_param(&idtfc3->hw_param, addr,
-					get_unaligned_be32((void *)rec));
-			if (err == 0) {
-				/*
-				 * Skip the next record because the whole record (4 Bytes) is
-				 * used to represent u32 value of the current record
-				 */
-				rec++;
-				len -= sizeof(*rec);
-			}
+			len -= sizeof(*rec);
 		}
 
 		if (err != -EINVAL) {

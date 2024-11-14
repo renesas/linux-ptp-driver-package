@@ -11,7 +11,6 @@
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
-#include <stdbool.h>
 
 #define MAX_NUM_PRIORITY_ENTRIES 32
 #define TDC_FIFO_SIZE 16
@@ -79,8 +78,7 @@ struct rsmu_reference_monitor_status_alarms {
 };
 
 /* Get reference monitor status */
-struct rsmu_reference_monitor_status
-{
+struct rsmu_reference_monitor_status {
 	__u8 clock_index;
 	struct rsmu_reference_monitor_status_alarms alarms;
 };
