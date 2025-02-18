@@ -17,8 +17,8 @@ Microsoft Studio Code (https://code.visualstudio.com/) can be used to view a ren
 ## Revision History
 | Version               | Package                                                 |
 |-----------------------|---------------------------------------------------------|
-| pcm4l 4.3.0++         | 2.0, 2.1                                                |
-| pcm4l 4.2.1++         | 2.0, 2.1                                                |
+| pcm4l 4.3.0++         | 2.0, 2.1, 2.2                                           |
+| pcm4l 4.2.1++         | 2.0, 2.1, 2.2                                           |
 | pcm4l 4.2.0           | Renesas_MFD_PTP_MISC_patches_2022_07_25_5ecd2144.tar.gz |
 | pcm4l 4.1.4           | Renesas_MFD_PTP_MISC_patches_2022_02_24_e9d9162c.tar.gz |
 | pcm4l 4.1.3 and below	| Renesas_MFD_PTP_MISC_patches_2021_09_17_59227acc.tar.gz |
@@ -220,7 +220,7 @@ If a specific kernel feature is needed, the driver may be able to be modified to
 
 Below are some example scenarios where patch files can be applied to modify the driver or the kernel source.
 
-### Linux v6.3 - v6.5-rc4
+### Linux v6.5
 
 In 6.3, i2c_device_id parameter is removed.
 
@@ -233,59 +233,84 @@ $ patch --directory=../linux-stable -p1 < patches/0002-mfd-rsmu_i2c-Convert-to-i
 $ patch --directory=../linux-stable -p1 < patches/0003-mfd-Switch-i2c-drivers-back-to-use-.probe.patch
 ```
 
-### Linux v6.1 - v6.2
+### Linux v6.3 - v6.4
 
-In 6.1, I2C driver changed to return void from int.
+In 6.3, i2c_device_id parameter is removed.
+Remove getmaxphase call-back introduce in v6.5.
 
 ```
 In ptp-driver-package repository root directory, target linux kernel is "../linux-stable":
 
 $ patch --directory=../linux-stable -p1 < patches/0001-Change-spi-remove-func-return-void.patch
 $ patch --directory=../linux-stable -p1 < patches/0001-i2c-Make-remove-callback-return-void.patch
+$ patch --directory=../linux-stable -p1 < patches/0002-mfd-rsmu_i2c-Convert-to-i2c-s-.probe_new.patch
+$ patch --directory=../linux-stable -p1 < patches/0003-mfd-Switch-i2c-drivers-back-to-use-.probe.patch
+$ patch --directory=../linux-stable -p1 < patches/0001-Revert-Add-getmaxphase-ptp_clock_info-callback.patch
 ```
 
-### Linux v5.18 - v6.0
+### Linux v6.1 - v6.2
 
-In 5.18, SPI driver "remove" callback was changed to a void function.
+In 6.1, I2C driver changed to return void from int.
+Remove getmaxphase call-back introduce in v6.5.
 
 ```
 In ptp-driver-package repository root directory, target linux kernel is "../linux-stable":
 
 $ patch --directory=../linux-stable -p1 < patches/0001-Change-spi-remove-func-return-void.patch
+$ patch --directory=../linux-stable -p1 < patches/0001-i2c-Make-remove-callback-return-void.patch
+$ patch --directory=../linux-stable -p1 < patches/0001-Revert-Add-getmaxphase-ptp_clock_info-callback.patch
+```
+
+### Linux v5.18 - v6.0
+
+In 5.18, SPI driver "remove" callback was changed to a void function.
+Remove getmaxphase call-back introduce in v6.5.
+
+```
+In ptp-driver-package repository root directory, target linux kernel is "../linux-stable":
+
+$ patch --directory=../linux-stable -p1 < patches/0001-Change-spi-remove-func-return-void.patch
+$ patch --directory=../linux-stable -p1 < patches/0001-Revert-Add-getmaxphase-ptp_clock_info-callback.patch
 ```
 
 ### Linux v5.8 - v5.17
 
-No modifications needed.  Driver files should work as-is.
+Remove getmaxphase call-back introduce in v6.5.
+
+$ patch --directory=../linux-stable -p1 < patches/0001-Revert-Add-getmaxphase-ptp_clock_info-callback.patch
 
 ### Linux v5.4 - v5.7
 
 Need to apply write phase adjust patch to kernel.
+Remove getmaxphase call-back introduce in v6.5.
 
 ```
 In ptp-driver-package repository root directory, target linux kernel is "../linux-stable":
 
 $ patch --directory=../linux-stable -p1 < patches/0001-Introduce-adjphase-to-PHC-API.patch
+$ patch --directory=../linux-stable -p1 < patches/0001-Revert-Add-getmaxphase-ptp_clock_info-callback.patch
+
 ```
 ### Linux v4.13 - v5.3
 Need to apply introduce write phase adjust and remove PTP_STRICT_FLAGS from PTP driver patch.
+Remove getmaxphase call-back introduce in v6.5.
 ```
 In ptp-driver-package repository root directory, target linux kernel is "../linux-stable":
 
 $ patch --directory=../linux-stable -p1 < patches/0001-Introduce-adjphase-to-PHC-API.patch
-
 $ patch --directory=../linux-stable -p1 < patches/0001-Remove-PTP_STRICT_FLAGS-usage.patch
+$ patch --directory=../linux-stable -p1 < patches/0001-Revert-Add-getmaxphase-ptp_clock_info-callback.patch
 ```
 ### Linux v4.11 - 4.12
 Need to apply introduce ptp_schedule_worker, introduce write phase adjust and remove PTP_STRICT_FLAGS from PTP driver patch.
+Remove getmaxphase call-back introduce in v6.5.
 ```
 In ptp-driver-package repository root directory, target linux kernel is "../linux-stable":
 
 $ patch --directory=../linux-stable -p1 < patches/0001-ptp-introduce-ptp-auxiliary-worker.patch
-
 $ patch --directory=../linux-stable -p1 < patches/0001-Introduce-adjphase-to-PHC-API.patch
-
 $ patch --directory=../linux-stable -p1 < patches/0001-Remove-PTP_STRICT_FLAGS-usage.patch
+$ patch --directory=../linux-stable -p1 < patches/0001-Revert-Add-getmaxphase-ptp_clock_info-callback.patch
 ```
 
 ### Linux v4.10 and below

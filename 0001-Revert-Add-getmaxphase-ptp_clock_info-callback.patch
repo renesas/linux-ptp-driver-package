@@ -1,0 +1,109 @@
+From 0913dc69a08a7c5c96c84db4684ef8c64df10e58 Mon Sep 17 00:00:00 2001
+From: Vincent Cheng <vincent.cheng.xh@renesas.com>
+Date: Mon, 17 Feb 2025 22:18:15 -0500
+Subject: [PATCH] Revert "[STEELAI-871] Add "ptp: ptp_clockmatrix: Add
+ .getmaxphase ptp_clock_info callback""
+
+This reverts commit 3dc7b54774e2c7e71b88d0f831d70aa83f934e1a.
+---
+ linux/drivers/ptp/ptp_clockmatrix.c | 40 +++++++++++++++--------------
+ linux/drivers/ptp/ptp_clockmatrix.h |  2 +-
+ 2 files changed, 22 insertions(+), 20 deletions(-)
+
+diff --git a/linux/drivers/ptp/ptp_clockmatrix.c b/linux/drivers/ptp/ptp_clockmatrix.c
+index 624fc00..b333363 100644
+--- a/linux/drivers/ptp/ptp_clockmatrix.c
++++ b/linux/drivers/ptp/ptp_clockmatrix.c
+@@ -1707,31 +1707,23 @@ static int initialize_dco_operating_mode(struct idtcm_channel *channel)
+ /* PTP Hardware Clock interface */
+ 
+ /*
+- * Maximum absolute value for write phase offset in nanoseconds
+- *
+- * Destination signed register is 32-bit register in resolution of 50ps
+- *
+- * 0x7fffffff * 50 =  2147483647 * 50 = 107374182350 ps
+- * Represent 107374182350 ps as 107374182 ns
+- */
+-static s32 idtcm_getmaxphase(struct ptp_clock_info *ptp __always_unused)
+-{
+-	return MAX_ABS_WRITE_PHASE_NANOSECONDS;
+-}
+-
+-/*
+- * Internal function for implementing support for write phase offset
++ * Maximum absolute value for write phase offset in picoseconds
+  *
+  * @channel:  channel
+  * @delta_ns: delta in nanoseconds
++ *
++ * Destination signed register is 32-bit register in resolution of 50ps
++ *
++ * 0x7fffffff * 50 =  2147483647 * 50 = 107374182350
+  */
+ static int _idtcm_adjphase(struct idtcm_channel *channel, s32 delta_ns)
+ {
+ 	struct idtcm *idtcm = channel->idtcm;
+-	int err;
+-	u8 i;
+ 	u8 buf[4] = {0};
+ 	s32 phase_50ps;
++	s64 offset_ps;
++	int err;
++	u8 i;
+ 
+ 	if (channel->mode != PTP_PLL_MODE_WRITE_PHASE) {
+ 		err = channel->configure_write_phase(channel);
+@@ -1739,7 +1731,19 @@ static int _idtcm_adjphase(struct idtcm_channel *channel, s32 delta_ns)
+ 			return err;
+ 	}
+ 
+-	phase_50ps = div_s64((s64)delta_ns * 1000, 50);
++	offset_ps = (s64)delta_ns * 1000;
++
++	/*
++	 * Check for 32-bit signed max * 50:
++	 *
++	 * 0x7fffffff * 50 =  2147483647 * 50 = 107374182350
++	 */
++	if (offset_ps > MAX_ABS_WRITE_PHASE_PICOSECONDS)
++		offset_ps = MAX_ABS_WRITE_PHASE_PICOSECONDS;
++	else if (offset_ps < -MAX_ABS_WRITE_PHASE_PICOSECONDS)
++		offset_ps = -MAX_ABS_WRITE_PHASE_PICOSECONDS;
++
++	phase_50ps = div_s64(offset_ps, 50);
+ 
+ 	for (i = 0; i < 4; i++) {
+ 		buf[i] = phase_50ps & 0xff;
+@@ -2056,7 +2060,6 @@ static const struct ptp_clock_info idtcm_caps = {
+ 	.n_ext_ts	= MAX_TOD,
+ 	.n_pins		= MAX_REF_CLK,
+ 	.adjphase	= &idtcm_adjphase,
+-	.getmaxphase	= &idtcm_getmaxphase,
+ 	.adjfine	= &idtcm_adjfine,
+ 	.adjtime	= &idtcm_adjtime,
+ 	.gettime64	= &idtcm_gettime,
+@@ -2073,7 +2076,6 @@ static const struct ptp_clock_info idtcm_caps_deprecated = {
+ 	.n_ext_ts	= MAX_TOD,
+ 	.n_pins		= MAX_REF_CLK,
+ 	.adjphase	= &idtcm_adjphase,
+-	.getmaxphase    = &idtcm_getmaxphase,
+ 	.adjfine	= &idtcm_adjfine,
+ 	.adjtime	= &idtcm_adjtime_deprecated,
+ 	.gettime64	= &idtcm_gettime,
+diff --git a/linux/drivers/ptp/ptp_clockmatrix.h b/linux/drivers/ptp/ptp_clockmatrix.h
+index f041c79..f007a4b 100644
+--- a/linux/drivers/ptp/ptp_clockmatrix.h
++++ b/linux/drivers/ptp/ptp_clockmatrix.h
+@@ -18,7 +18,7 @@
+ #define MAX_PLL		(8)
+ #define MAX_REF_CLK	(16)
+ 
+-#define MAX_ABS_WRITE_PHASE_NANOSECONDS (107374182L)
++#define MAX_ABS_WRITE_PHASE_PICOSECONDS (107374182350LL)
+ #define MAX_FFO_PPB (244000)
+ 
+ #define PHASE_PULL_IN_THRESHOLD_NS_DEPRECATED	(150000)
+-- 
+2.34.1
+
