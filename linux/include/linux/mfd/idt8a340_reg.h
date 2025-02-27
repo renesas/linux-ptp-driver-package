@@ -857,8 +857,9 @@ struct idtcm_fwrc {
 	u8 reserved;
 } __packed;
 
-#define SET_U16_LSB(orig, val8) (orig = (0xff00 & (orig)) | (val8))
-#define SET_U16_MSB(orig, val8) (orig = (0x00ff & (orig)) | (val8 << 8))
+#define SET_U16_LSB(orig, val8) (orig = (typeof(orig))((0xff00 & (orig)) | (val8)))
+#define SET_U16_MSB(orig, val8) (orig = (typeof(orig))((0x00ff & (orig)) | (val8 << 8)))
+
 
 #define TOD_MASK_ADDR		(0xFFA5)
 #define DEFAULT_TOD_MASK	(0x04)

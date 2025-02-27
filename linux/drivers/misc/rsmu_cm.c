@@ -26,7 +26,9 @@ static int check_and_set_masks(struct rsmu_cdev *rsmu,
 			       u8 val)
 {
 	int err = 0;
-
+	(void)rsmu;
+	(void)regaddr;
+	(void)val;
 	return err;
 }
 
@@ -157,7 +159,7 @@ static int rsmu_cm_set_combomode(struct rsmu_cdev *rsmu, u8 dpll, u8 mode)
 	if (mode)
 		reg |= COMBO_MASTER_HOLD;
 	else
-		reg &= ~COMBO_MASTER_HOLD;
+		reg &= (u8)(~COMBO_MASTER_HOLD);
 
 	return regmap_bulk_write(rsmu->regmap, dpll_ctrl_reg_addr + DPLL_CTRL_COMBO_MASTER_CFG,
 						&reg, sizeof(reg));
@@ -239,7 +241,7 @@ static int rsmu_cm_set_output_tdc_go(struct rsmu_cdev *rsmu, u8 tdc, u8 enable)
 	if (enable)
 		reg |= 0x01;
 	else
-		reg &= ~0x01;
+		reg &= (u8)(~0x01);
 
 	return regmap_bulk_write(rsmu->regmap, tdc_n + tdc_ctrl4_offset,
 				 &reg, sizeof(reg));
@@ -335,13 +337,13 @@ static int rsmu_cm_get_dpll_ffo(struct rsmu_cdev *rsmu, u8 dpll,
 
 static int load_firmware(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 {
-	u16 scratch = IDTCM_FW_REG(FW_VERSION(rsmu), V520, SCRATCH);
+	u16 scratch = (u16)IDTCM_FW_REG(FW_VERSION(rsmu), V520, SCRATCH);
 	char fname[FW_NAME_LEN_MAX] = FW_FILENAME;
 	const struct firmware *fw;
 	struct idtcm_fwrc *rec;
 	u32 regaddr;
 	int err;
-	s32 len;
+	size_t len;
 	u8 val;
 	u8 loaddr;
 
@@ -374,7 +376,7 @@ static int load_firmware(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 
 			rec++;
 
-			err = check_and_set_masks(rsmu, regaddr, val);
+			err = check_and_set_masks(rsmu, (u16)regaddr, val);
 		}
 
 		if (err != -EINVAL) {
@@ -433,7 +435,7 @@ static int rsmu_cm_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 numb
 	u32 dpll_reg_addr;
 	u8 dpll_mode_reg_off;
 	int priority_index;
-	int prev_priority_group = 0;
+	u8 prev_priority_group = 0;
 	u8 current_priority_group;
 	int prev_priority = -1;
 	u8 reg;
@@ -470,9 +472,9 @@ static int rsmu_cm_set_clock_priorities(struct rsmu_cdev *rsmu, u8 dpll, u8 numb
 
 		prev_priority = priority_entry->priority;
 
-		reg = (1 << DPLL_REF_PRIORITY_ENABLE_SHIFT) |
+		reg = (u8)((1 << DPLL_REF_PRIORITY_ENABLE_SHIFT) |
 			(priority_entry->clock_index << DPLL_REF_PRIORITY_REF_SHIFT) |
-			(current_priority_group << DPLL_REF_PRIORITY_GROUP_NUMBER_SHIFT);
+			(current_priority_group << DPLL_REF_PRIORITY_GROUP_NUMBER_SHIFT));
 
 		err = regmap_bulk_write(rsmu->regmap, dpll_reg_addr + DPLL_REF_PRIORITY_0 +
 					priority_index, &reg, sizeof(reg));

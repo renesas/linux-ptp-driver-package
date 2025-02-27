@@ -11,7 +11,8 @@
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
-#include <stdbool.h>
+#include <linux/types.h>
+#include <linux/stddef.h>
 
 #define MAX_NUM_PRIORITY_ENTRIES 32
 #define TDC_FIFO_SIZE 16

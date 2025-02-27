@@ -48,6 +48,7 @@ static const struct regmap_range_cfg rsmu_sabre_range_cfg[] = {
 
 static bool rsmu_sabre_volatile_reg(struct device *dev, unsigned int reg)
 {
+	(void)dev;
 	switch (reg) {
 	case RSMU_SABRE_PAGE_ADDR:
 		return false;
@@ -113,9 +114,6 @@ static int rsmu_i2c_write_device(struct rsmu_ddata *rsmu, u8 reg, u8 *buf, u8 by
 	/* we add 1 byte for device register */
 	u8 msg[RSMU_MAX_WRITE_COUNT + 1];
 	int cnt;
-
-	if (bytes > RSMU_MAX_WRITE_COUNT)
-		return -EINVAL;
 
 	msg[0] = reg;
 	memcpy(&msg[1], buf, bytes);
@@ -316,7 +314,7 @@ static int rsmu_i2c_probe(struct i2c_client *client,
 		rsmu->regmap = devm_regmap_init_i2c(client, cfg);
 
 	if (IS_ERR(rsmu->regmap)) {
-		ret = PTR_ERR(rsmu->regmap);
+		ret = (int)PTR_ERR(rsmu->regmap);
 		dev_err(rsmu->dev, "Failed to allocate register map: %d\n", ret);
 		return ret;
 	}

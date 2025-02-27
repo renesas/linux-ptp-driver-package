@@ -68,7 +68,7 @@ static int contains_full_configuration(struct idtcm *idtcm,
 	s32 count = 0;
 	u16 regaddr;
 	u8 loaddr;
-	s32 len;
+	size_t len;
 
 	/* 4 bytes skipped every 0x80 */
 	full_count = (scratch - gpio_control) -
@@ -81,8 +81,7 @@ static int contains_full_configuration(struct idtcm *idtcm,
 	 * bytes within the configuration range minus page offset addr range.
 	 */
 	for (len = fw->size; len > 0; len -= sizeof(*rec)) {
-		regaddr = rec->hiaddr << 8;
-		regaddr |= rec->loaddr;
+		regaddr = (u16)((rec->hiaddr << 8) | rec->loaddr);
 
 		loaddr = rec->loaddr;
 
@@ -137,13 +136,13 @@ static int timespec_to_char_array(struct timespec64 const *ts,
 				  u8 count)
 {
 	u8 i;
-	s32 nsec;
+	u32 nsec;
 	time64_t sec;
 
 	if (count < TOD_BYTE_COUNT)
 		return 1;
 
-	nsec = ts->tv_nsec;
+	nsec = (u32)ts->tv_nsec;
 	sec = ts->tv_sec;
 
 	/* Sub-nanoseconds are in buf[0]. */
@@ -155,7 +154,7 @@ static int timespec_to_char_array(struct timespec64 const *ts,
 
 	for (i = 5; i < TOD_BYTE_COUNT; i++) {
 
-		buf[i] = sec & 0xff;
+		buf[i] = (u8)(sec & 0xff);
 		sec >>= 8;
 	}
 
@@ -247,7 +246,7 @@ static int arm_tod_read_trig_sel_refclk(struct idtcm_channel *channel, u8 ref)
 	u8 val = 0;
 	int err;
 
-	val &= ~(WR_REF_INDEX_MASK << WR_REF_INDEX_SHIFT);
+	val &= (u8)(~(WR_REF_INDEX_MASK << WR_REF_INDEX_SHIFT));
 	val |= (ref << WR_REF_INDEX_SHIFT);
 
 	err = idtcm_write(idtcm, channel->tod_read_secondary,
@@ -274,9 +273,9 @@ static bool is_single_shot(u8 mask)
 static int idtcm_extts_enable(struct idtcm_channel *channel,
 			      struct ptp_clock_request *rq, int on)
 {
-	u8 index = rq->extts.index;
+	u8 index = (u8)rq->extts.index;
 	struct idtcm *idtcm;
-	u8 mask = 1 << index;
+	u8 mask = (u8)(1 << index);
 	int err = 0;
 	u8 old_mask;
 	int ref;
@@ -310,12 +309,12 @@ static int idtcm_extts_enable(struct idtcm_channel *channel,
 			return -EBUSY;
 		}
 
-		err = arm_tod_read_trig_sel_refclk(&idtcm->channel[index], ref);
+		err = arm_tod_read_trig_sel_refclk(&idtcm->channel[index], (u8)ref);
 
 		if (err == 0) {
 			idtcm->extts_mask |= mask;
 			idtcm->event_channel[index] = channel;
-			idtcm->channel[index].refn = ref;
+			idtcm->channel[index].refn = (u8)ref;
 			idtcm->extts_single_shot = is_single_shot(idtcm->extts_mask);
 
 			if (old_mask)
@@ -325,7 +324,7 @@ static int idtcm_extts_enable(struct idtcm_channel *channel,
 					      msecs_to_jiffies(EXTTS_PERIOD_MS));
 		}
 	} else {
-		idtcm->extts_mask &= ~mask;
+		idtcm->extts_mask &= (u8)(~mask);
 		idtcm->extts_single_shot = is_single_shot(idtcm->extts_mask);
 
 		if (idtcm->extts_mask == 0)
@@ -582,7 +581,7 @@ static int _sync_pll_output(struct idtcm *idtcm,
 		if (err)
 			return err;
 
-		temp &= ~(Q9_TO_Q8_SYNC_TRIG);
+		temp &= (u8)(~(Q9_TO_Q8_SYNC_TRIG));
 
 		err = idtcm_write(idtcm, HW_Q8_CTRL_SPARE, 0,
 				  &temp, sizeof(temp));
@@ -604,7 +603,7 @@ static int _sync_pll_output(struct idtcm *idtcm,
 		if (err)
 			return err;
 
-		temp &= ~(Q10_TO_Q11_SYNC_TRIG);
+		temp &= (u8)(~(Q10_TO_Q11_SYNC_TRIG));
 
 		err = idtcm_write(idtcm, HW_Q11_CTRL_SPARE, 0,
 				  &temp, sizeof(temp));
@@ -620,7 +619,7 @@ static int _sync_pll_output(struct idtcm *idtcm,
 	}
 
 	/* Place master sync out of reset */
-	val &= ~(SYNCTRL1_MASTER_SYNC_RST);
+	val &= (u8)(~(SYNCTRL1_MASTER_SYNC_RST));
 	err = idtcm_write(idtcm, sync_ctrl1, 0, &val, sizeof(val));
 
 	return err;
@@ -720,8 +719,8 @@ static int _idtcm_set_dpll_hw_tod(struct idtcm_channel *channel,
 	if (err)
 		return err;
 
-	cmd &= ~(0x0f);
-	cmd |= wr_trig | 0x08;
+	cmd &= (u8)(~(0x0f));
+	cmd |= (u8)wr_trig | 0x08;
 
 	err = idtcm_write(idtcm, channel->hw_dpll_n, HW_DPLL_TOD_CTRL_1,
 			  &cmd, sizeof(cmd));
@@ -740,7 +739,7 @@ static int _idtcm_set_dpll_hw_tod(struct idtcm_channel *channel,
 	}
 
 	/* ARM HW TOD write trigger. */
-	cmd &= ~(0x08);
+	cmd &= (u8)(~(0x08));
 
 	err = idtcm_write(idtcm, channel->hw_dpll_n, HW_DPLL_TOD_CTRL_1,
 			  &cmd, sizeof(cmd));
@@ -776,7 +775,7 @@ static int _idtcm_set_dpll_scsr_tod(struct idtcm_channel *channel,
 				    enum scsr_tod_write_type_sel wr_type)
 {
 	struct idtcm *idtcm = channel->idtcm;
-	unsigned char buf[TOD_BYTE_COUNT], cmd;
+	u8 buf[TOD_BYTE_COUNT], cmd;
 	struct timespec64 local_ts = *ts;
 	int err, count = 0;
 
@@ -797,10 +796,10 @@ static int _idtcm_set_dpll_scsr_tod(struct idtcm_channel *channel,
 	if (err)
 		return err;
 
-	cmd &= ~(TOD_WRITE_SELECTION_MASK << TOD_WRITE_SELECTION_SHIFT);
-	cmd &= ~(TOD_WRITE_TYPE_MASK << TOD_WRITE_TYPE_SHIFT);
-	cmd |= (wr_trig << TOD_WRITE_SELECTION_SHIFT);
-	cmd |= (wr_type << TOD_WRITE_TYPE_SHIFT);
+	cmd &= (u8)(~(TOD_WRITE_SELECTION_MASK << TOD_WRITE_SELECTION_SHIFT));
+	cmd &= (u8)(~(TOD_WRITE_TYPE_MASK << TOD_WRITE_TYPE_SHIFT));
+	cmd |= (u8)(wr_trig << TOD_WRITE_SELECTION_SHIFT);
+	cmd |= (u8)(wr_type << TOD_WRITE_TYPE_SHIFT);
 
 	err = idtcm_write(idtcm, channel->tod_write, TOD_WRITE_CMD,
 			   &cmd, sizeof(cmd));
@@ -913,7 +912,7 @@ static int idtcm_set_phase_pull_in_offset(struct idtcm_channel *channel,
 	u8 buf[4];
 
 	for (i = 0; i < 4; i++) {
-		buf[i] = 0xff & (offset_ns);
+		buf[i] = (u8)(0xff & offset_ns);
 		offset_ns >>= 8;
 	}
 
@@ -1037,8 +1036,8 @@ static int _idtcm_adjtime_deprecated(struct idtcm_channel *channel, s64 delta)
 	struct timespec64 ts;
 	s64 now;
 
-	if (abs(delta) < PHASE_PULL_IN_THRESHOLD_NS_DEPRECATED) {
-		err = channel->do_phase_pull_in(channel, delta, channel->caps.max_adj);
+	if ((delta > -PHASE_PULL_IN_THRESHOLD_NS_DEPRECATED) && (delta < PHASE_PULL_IN_THRESHOLD_NS_DEPRECATED)) {
+		err = channel->do_phase_pull_in(channel, (s32)delta, (u32)channel->caps.max_adj);
 	} else {
 		idtcm->calculate_overhead_flag = 1;
 
@@ -1106,7 +1105,7 @@ static int idtcm_read_product_id(struct idtcm *idtcm, u16 *product_id)
 
 	err = idtcm_read(idtcm, GENERAL_STATUS, PRODUCT_ID, buf, sizeof(buf));
 
-	*product_id = (buf[1] << 8) | buf[0];
+	*product_id = (u16)((buf[1] << 8) | buf[0]);
 
 	return err;
 }
@@ -1241,7 +1240,7 @@ static void display_pll_and_masks(struct idtcm *idtcm)
 	dev_dbg(idtcm->dev, "tod_mask = 0x%02x", idtcm->tod_mask);
 
 	for (i = 0; i < MAX_TOD; i++) {
-		mask = 1 << i;
+		mask = (u8)(1 << i);
 
 		if (mask & idtcm->tod_mask)
 			dev_dbg(idtcm->dev,
@@ -1260,7 +1259,7 @@ static int idtcm_load_firmware(struct idtcm *idtcm,
 	struct idtcm_fwrc *rec;
 	u32 regaddr;
 	int err;
-	s32 len;
+	size_t len;
 	u8 val;
 	u8 loaddr;
 
@@ -1297,7 +1296,7 @@ static int idtcm_load_firmware(struct idtcm *idtcm,
 
 			rec++;
 
-			err = check_and_set_masks(idtcm, regaddr, val);
+			err = check_and_set_masks(idtcm, (u16)regaddr, val);
 		}
 
 		if (err != -EINVAL) {
@@ -1333,7 +1332,7 @@ static int idtcm_output_enable(struct idtcm_channel *channel,
 	int err;
 	u8 val;
 
-	base = get_output_base_addr(idtcm->fw_ver, outn);
+	base = get_output_base_addr(idtcm->fw_ver, (u8)outn);
 
 	if (!(base > 0)) {
 		dev_err(idtcm->dev,
@@ -1348,7 +1347,7 @@ static int idtcm_output_enable(struct idtcm_channel *channel,
 	if (enable)
 		val |= SQUELCH_DISABLE;
 	else
-		val &= ~SQUELCH_DISABLE;
+		val &= (u8)(~SQUELCH_DISABLE);
 
 	return idtcm_write(idtcm, (u32)base, OUT_CTRL_1, &val, sizeof(val));
 }
@@ -1417,9 +1416,9 @@ static int idtcm_set_pll_mode(struct idtcm_channel *channel,
 	if (err)
 		return err;
 
-	dpll_mode &= ~(PLL_MODE_MASK << PLL_MODE_SHIFT);
+	dpll_mode &= (u8)(~(PLL_MODE_MASK << PLL_MODE_SHIFT));
 
-	dpll_mode |= (mode << PLL_MODE_SHIFT);
+	dpll_mode |= (u8)(mode << PLL_MODE_SHIFT);
 
 	err = idtcm_write(idtcm, channel->dpll_n,
 			  IDTCM_FW_REG(idtcm->fw_ver, V520, DPLL_MODE),
@@ -1460,9 +1459,9 @@ static int idtcm_set_manual_reference(struct idtcm_channel *channel,
 	if (err)
 		return err;
 
-	dpll_manu_ref_cfg &= ~(MANUAL_REFERENCE_MASK << MANUAL_REFERENCE_SHIFT);
+	dpll_manu_ref_cfg &= (u8)(~(MANUAL_REFERENCE_MASK << MANUAL_REFERENCE_SHIFT));
 
-	dpll_manu_ref_cfg |= (ref << MANUAL_REFERENCE_SHIFT);
+	dpll_manu_ref_cfg |= (u8)(ref << MANUAL_REFERENCE_SHIFT);
 
 	err = idtcm_write(idtcm, channel->dpll_ctrl_n,
 			  DPLL_CTRL_DPLL_MANU_REF_CFG,
@@ -1564,10 +1563,10 @@ static s32 phase_pull_in_scaled_ppm(s32 current_ppm, s32 phase_pull_in_ppb)
 	/* ppb = scaled_ppm * 125 / 2^13 */
 	/* scaled_ppm = ppb * 2^13 / 125 */
 
-	s64 max_scaled_ppm = div_s64((s64)PHASE_PULL_IN_MAX_PPB << 13, 125);
+	s32 max_scaled_ppm = (s32)(((s64)(PHASE_PULL_IN_MAX_PPB) << 13) / 125);
 	s64 scaled_ppm = div_s64((s64)phase_pull_in_ppb << 13, 125);
 
-	current_ppm += scaled_ppm;
+	current_ppm += (s32)scaled_ppm;
 
 	if (current_ppm > max_scaled_ppm)
 		current_ppm = max_scaled_ppm;
@@ -1591,7 +1590,7 @@ static int do_phase_pull_in_sw(struct idtcm_channel *channel,
 	 * skip. The error introduced by the ToD adjustment procedure would
 	 * be bigger than the required ToD correction
 	 */
-	if (abs(delta_ns) < PHASE_PULL_IN_MIN_THRESHOLD_NS)
+	if ((delta_ns > -PHASE_PULL_IN_MIN_THRESHOLD_NS) && (delta_ns < PHASE_PULL_IN_MIN_THRESHOLD_NS))
 		return 0;
 
 	if (max_ffo_ppb == 0 || max_ffo_ppb > PHASE_PULL_IN_MAX_PPB)
@@ -1599,7 +1598,7 @@ static int do_phase_pull_in_sw(struct idtcm_channel *channel,
 
 	/* For most cases, keep phase pull-in duration 1 second */
 	ppb = delta_ns;
-	while (abs(ppb) > max_ffo_ppb) {
+	while ((ppb > (s32)max_ffo_ppb) || (ppb < -(s32)max_ffo_ppb)) {
 		duration_ms *= 2;
 		ppb /= 2;
 	}
@@ -1743,10 +1742,10 @@ static int _idtcm_adjphase(struct idtcm_channel *channel, s32 delta_ns)
 	else if (offset_ps < -MAX_ABS_WRITE_PHASE_PICOSECONDS)
 		offset_ps = -MAX_ABS_WRITE_PHASE_PICOSECONDS;
 
-	phase_50ps = div_s64(offset_ps, 50);
+	phase_50ps = (s32)div_s64(offset_ps, 50);
 
 	for (i = 0; i < 4; i++) {
-		buf[i] = phase_50ps & 0xff;
+		buf[i] = (u8)(phase_50ps & 0xff);
 		phase_50ps >>= 8;
 	}
 
@@ -1790,7 +1789,7 @@ static int _idtcm_adjfine(struct idtcm_channel *channel, long scaled_ppm)
 	fcw = div_s64(fcw, 1776);
 
 	for (i = 0; i < 6; i++) {
-		buf[i] = fcw & 0xff;
+		buf[i] = (u8)(fcw & 0xff);
 		fcw >>= 8;
 	}
 
@@ -1883,8 +1882,8 @@ static int idtcm_adjtime(struct ptp_clock_info *ptp, s64 delta)
 
 	mutex_lock(idtcm->lock);
 
-	if (abs(delta) < PHASE_PULL_IN_THRESHOLD_NS) {
-		err = channel->do_phase_pull_in(channel, delta, channel->caps.max_adj);
+	if ((delta > -PHASE_PULL_IN_THRESHOLD_NS) && (delta < PHASE_PULL_IN_THRESHOLD_NS)) {
+		err = channel->do_phase_pull_in(channel, (s32)delta, (u32)channel->caps.max_adj);
 	} else {
 		if (delta >= 0) {
 			ts = ns_to_timespec64(delta);
@@ -1922,7 +1921,7 @@ static int idtcm_adjphase(struct ptp_clock_info *ptp, s32 delta)
 	return err;
 }
 
-static int idtcm_adjfine(struct ptp_clock_info *ptp,  long scaled_ppm)
+static int idtcm_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 {
 	struct idtcm_channel *channel = container_of(ptp, struct idtcm_channel, caps);
 	struct idtcm *idtcm = channel->idtcm;
@@ -1939,7 +1938,7 @@ static int idtcm_adjfine(struct ptp_clock_info *ptp,  long scaled_ppm)
 		dev_err(idtcm->dev,
 			"Failed at line %d in %s!", __LINE__, __func__);
 	else
-		channel->current_freq_scaled_ppm = scaled_ppm;
+		channel->current_freq_scaled_ppm = (s32)scaled_ppm;
 
 	return err;
 }
@@ -2040,6 +2039,9 @@ static void idtcm_set_version_info(struct idtcm *idtcm)
 static int idtcm_verify_pin(struct ptp_clock_info *ptp, unsigned int pin,
 			    enum ptp_pin_function func, unsigned int chan)
 {
+	(void)ptp;
+	(void)pin;
+	(void)chan;
 	switch (func) {
 	case PTP_PF_NONE:
 	case PTP_PF_EXTTS:
@@ -2323,7 +2325,7 @@ static int idtcm_enable_channel(struct idtcm *idtcm, u32 index)
 	channel->ptp_clock = ptp_clock_register(&channel->caps, NULL);
 
 	if (IS_ERR(channel->ptp_clock)) {
-		err = PTR_ERR(channel->ptp_clock);
+		err = (int)PTR_ERR(channel->ptp_clock);
 		channel->ptp_clock = NULL;
 		return err;
 	}
@@ -2364,28 +2366,28 @@ static void idtcm_extts_check(struct work_struct *work)
 	struct idtcm_channel *channel;
 	u8 mask;
 	int err;
-	int i;
+	u8 tod;
 
 	if (idtcm->extts_mask == 0)
 		return;
 
 	mutex_lock(idtcm->lock);
 
-	for (i = 0; i < MAX_TOD; i++) {
-		mask = 1 << i;
+	for (tod = 0; tod < MAX_TOD; tod++) {
+		mask = (u8)(1 << tod);
 
 		if ((idtcm->extts_mask & mask) == 0)
 			continue;
 
-		err = idtcm_extts_check_channel(idtcm, i);
+		err = idtcm_extts_check_channel(idtcm, tod);
 
 		if (err == 0) {
 			/* trigger clears itself, so clear the mask */
 			if (idtcm->extts_single_shot) {
-				idtcm->extts_mask &= ~mask;
+				idtcm->extts_mask &= (u8)(~mask);
 			} else {
 				/* Re-arm */
-				channel = &idtcm->channel[i];
+				channel = &idtcm->channel[tod];
 				arm_tod_read_trig_sel_refclk(channel, channel->refn);
 			}
 		}

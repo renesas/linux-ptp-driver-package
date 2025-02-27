@@ -21,7 +21,10 @@ static u8 dpll_operating_mode_cnfg_prev[2] = {0xff, 0xff};
 static int check_and_set_masks(struct rsmu_cdev *rsmu, u8 page, u8 offset, u8 val)
 {
 	int err = 0;
-
+	(void)rsmu;
+	(void)page;
+	(void)offset;
+	(void)val;
 	return err;
 }
 
@@ -32,7 +35,7 @@ static int load_firmware(struct rsmu_cdev *rsmu, char fwname[FW_NAME_LEN_MAX])
 	struct idt82p33_fwrc *rec;
 	u8 loaddr, page, val;
 	int err;
-	s32 len;
+	size_t len;
 
 	if (fwname) /* module parameter */
 		snprintf(fname, sizeof(fname), "%s", fwname);
@@ -213,8 +216,8 @@ static int rsmu_sabre_set_combomode(struct rsmu_cdev *rsmu, u8 dpll, u8 mode)
 	if (err)
 		return err;
 
-	cfg &= ~(COMBO_MODE_MASK << COMBO_MODE_SHIFT);
-	cfg |= mode << COMBO_MODE_SHIFT;
+	cfg &= (u8)(~(COMBO_MODE_MASK << COMBO_MODE_SHIFT));
+	cfg |= (u8)(mode << COMBO_MODE_SHIFT);
 
 	return regmap_bulk_write(rsmu->regmap, dpll_ctrl_n, &cfg, sizeof(cfg));
 }

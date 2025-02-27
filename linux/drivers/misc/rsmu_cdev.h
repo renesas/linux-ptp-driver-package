@@ -31,8 +31,8 @@ struct rsmu_ops;
  */
 #define rsmu_set_bitfield(regVal, mask, lsb, data) \
 ({						   \
-	regVal = ((regVal & ~(mask)) |             \
-		  ((data << lsb) & (mask))         \
+	regVal = (typeof(regVal))((regVal & ~(mask)) |             \
+		  (typeof(regVal))((data << lsb) & (mask))         \
 		 );				   \
 })
 

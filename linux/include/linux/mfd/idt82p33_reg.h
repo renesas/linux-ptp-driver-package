@@ -7,7 +7,7 @@
 #ifndef HAVE_IDT82P33_REG
 #define HAVE_IDT82P33_REG
 
-#define REG_ADDR(page, offset) (((page) << 0x7) | ((offset) & 0x7f))
+#define REG_ADDR(page, offset) (((unsigned int)(page) << 0x7) | ((unsigned int)(offset) & 0x7f))
 
 /* Register address */
 #define DPLL1_TOD_CNFG 0x134

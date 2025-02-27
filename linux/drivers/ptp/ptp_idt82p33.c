@@ -79,10 +79,10 @@ static void idt82p33_timespec_to_byte_array(struct timespec64 const *ts,
 					    u8 buf[TOD_BYTE_COUNT])
 {
 	time64_t sec;
-	s32 nsec;
+	u32 nsec;
 	u8 i;
 
-	nsec = ts->tv_nsec;
+	nsec = (u32)ts->tv_nsec;
 	sec = ts->tv_sec;
 
 	for (i = 0; i < 4; i++) {
@@ -91,7 +91,7 @@ static void idt82p33_timespec_to_byte_array(struct timespec64 const *ts,
 	}
 
 	for (i = 4; i < TOD_BYTE_COUNT; i++) {
-		buf[i] = sec & 0xff;
+		buf[i] = (u8)(sec & 0xff);
 		sec >>= 8;
 	}
 }
@@ -111,9 +111,9 @@ static int idt82p33_dpll_set_mode(struct idt82p33_channel *channel,
 	if (err)
 		return err;
 
-	dpll_mode &= ~(PLL_MODE_MASK << PLL_MODE_SHIFT);
+	dpll_mode &= (u8)(~(PLL_MODE_MASK << PLL_MODE_SHIFT));
 
-	dpll_mode |= (mode << PLL_MODE_SHIFT);
+	dpll_mode |= (u8)(mode << PLL_MODE_SHIFT);
 
 	err = idt82p33_write(idt82p33, channel->dpll_mode_cnfg,
 			     &dpll_mode, sizeof(dpll_mode));
@@ -142,11 +142,11 @@ static int idt82p33_set_tod_trigger(struct idt82p33_channel *channel,
 		return err;
 
 	if (write == true)
-		trigger = (trigger << WRITE_TRIGGER_SHIFT) |
-			  (cfg & READ_TRIGGER_MASK);
+		trigger = (u8)((trigger << WRITE_TRIGGER_SHIFT) |
+			  (cfg & READ_TRIGGER_MASK));
 	else
-		trigger = (trigger << READ_TRIGGER_SHIFT) |
-			  (cfg & WRITE_TRIGGER_MASK);
+		trigger = (u8)((trigger << READ_TRIGGER_SHIFT) |
+			  (cfg & WRITE_TRIGGER_MASK));
 
 	return idt82p33_write(idt82p33, channel->dpll_tod_trigger,
 			      &trigger, sizeof(trigger));
@@ -235,9 +235,9 @@ static int arm_tod_read_with_trigger(struct idt82p33_channel *channel, u8 trigge
 static int idt82p33_extts_enable(struct idt82p33_channel *channel,
 				 struct ptp_clock_request *rq, int on)
 {
-	u8 index = rq->extts.index;
+	u8 index = (u8)rq->extts.index;
 	struct idt82p33 *idt82p33;
-	u8 mask = 1 << index;
+	u8 mask = (u8)(1 << index);
 	int err = 0;
 	u8 old_mask;
 	u8 trigger;
@@ -298,7 +298,7 @@ static int idt82p33_extts_enable(struct idt82p33_channel *channel,
 					      msecs_to_jiffies(EXTTS_PERIOD_MS));
 		}
 	} else {
-		idt82p33->extts_mask &= ~mask;
+		idt82p33->extts_mask &= (u8)(~mask);
 		idt82p33->extts_single_shot = is_one_shot(idt82p33->extts_mask);
 
 		if (idt82p33->extts_mask == 0)
@@ -343,7 +343,7 @@ static u8 idt82p33_extts_enable_mask(struct idt82p33_channel *channel,
 		cancel_delayed_work_sync(&idt82p33->extts_work);
 
 	for (i = 0; i < MAX_PHC_PLL; i++) {
-		mask = 1 << i;
+		mask = (u8)(1 << i);
 
 		if ((extts_mask & mask) == 0)
 			continue;
@@ -355,10 +355,10 @@ static u8 idt82p33_extts_enable_mask(struct idt82p33_channel *channel,
 					"%s: Arm ToD read trigger failed, err = %d",
 					__func__, err);
 		} else {
-			err = idt82p33_extts_check_channel(idt82p33, i);
+			err = idt82p33_extts_check_channel(idt82p33, (u8)i);
 			if (err == 0 && idt82p33->extts_single_shot)
 				/* trigger happened so we won't re-enable it */
-				extts_mask &= ~mask;
+				extts_mask &= (u8)(~mask);
 		}
 	}
 
@@ -444,7 +444,7 @@ static int _idt82p33_settime(struct idt82p33_channel *channel,
 	 * Store the new time value.
 	 */
 	for (i = 0; i < TOD_BYTE_COUNT; i++) {
-		err = idt82p33_write(idt82p33, channel->dpll_tod_cnfg + i,
+		err = idt82p33_write(idt82p33, (u16)(channel->dpll_tod_cnfg + i),
 				     &buf[i], sizeof(buf[i]));
 		if (err)
 			return err;
@@ -557,7 +557,7 @@ static int _idt82p33_adjfine(struct idt82p33_channel *channel, long scaled_ppm)
 	fcw = div_s64(fcw, 8430756LL);
 
 	for (i = 0; i < 5; i++) {
-		buf[i] = fcw & 0xff;
+		buf[i] = (u8)(fcw & 0xff);
 		fcw >>= 8;
 	}
 
@@ -612,12 +612,12 @@ static int idt82p33_start_ddco(struct idt82p33_channel *channel, s32 delta_ns)
 	 * The error introduced by the ToD adjustment procedure would be bigger
 	 * than the required ToD correction
 	 */
-	if (abs(delta_ns) < DDCO_THRESHOLD_NS)
+	if ((delta_ns > -DDCO_THRESHOLD_NS) && (delta_ns < DDCO_THRESHOLD_NS))
 		return 0;
 
 	/* For most cases, keep ddco duration 1 second */
 	ppb = delta_ns;
-	while (abs(ppb) > DCO_MAX_PPB) {
+	while ((ppb < -DCO_MAX_PPB) || (ppb > DCO_MAX_PPB)) {
 		duration_ms *= 2;
 		ppb /= 2;
 	}
@@ -721,7 +721,7 @@ static int idt82p33_measure_tod_write_9_byte_overhead(
 		/* Need one less byte for applicable overhead */
 		for (j = 0; j < (TOD_BYTE_COUNT - 1); j++) {
 			err = idt82p33_write(idt82p33,
-					     channel->dpll_tod_cnfg + i,
+					     (u16)(channel->dpll_tod_cnfg + i),
 					     &buf[i], sizeof(buf[i]));
 			if (err)
 				return err;
@@ -835,7 +835,7 @@ static void idt82p33_display_masks(struct idt82p33 *idt82p33)
 		 "pllmask = 0x%02x\n", idt82p33->pll_mask);
 
 	for (i = 0; i < MAX_PHC_PLL; i++) {
-		mask = 1 << i;
+		mask = (u8)(1 << i);
 
 		if (mask & idt82p33->pll_mask)
 			dev_info(idt82p33->dev,
@@ -855,7 +855,7 @@ static int idt82p33_sync_tod(struct idt82p33_channel *channel, bool enable)
 	if (err)
 		return err;
 
-	sync_cnfg &= ~SYNC_TOD;
+	sync_cnfg &= (u8)(~SYNC_TOD);
 	if (enable)
 		sync_cnfg |= SYNC_TOD;
 
@@ -884,15 +884,15 @@ static int idt82p33_output_enable(struct idt82p33_channel *channel,
 	int err;
 	u8 val;
 
-	err = idt82p33_read(idt82p33, OUT_MUX_CNFG(outn), &val, sizeof(val));
+	err = idt82p33_read(idt82p33, (u16)OUT_MUX_CNFG(outn), &val, sizeof(val));
 	if (err)
 		return err;
 	if (enable)
-		val &= ~SQUELCH_ENABLE;
+		val &= (u8)(~SQUELCH_ENABLE);
 	else
 		val |= SQUELCH_ENABLE;
 
-	return idt82p33_write(idt82p33, OUT_MUX_CNFG(outn), &val, sizeof(val));
+	return idt82p33_write(idt82p33, (u16)OUT_MUX_CNFG(outn), &val, sizeof(val));
 }
 
 static int idt82p33_perout_enable(struct idt82p33_channel *channel,
@@ -997,10 +997,10 @@ static int idt82p33_adjwritephase(struct ptp_clock_info *ptp, s32 offset_ns)
 	/* Convert from phaseoffset_fs to register value */
 	offset_regval = div_s64(offset_fs * 1000, IDT_T0DPLL_PHASE_RESOL);
 
-	val[0] = offset_regval & 0xFF;
-	val[1] = (offset_regval >> 8) & 0xFF;
-	val[2] = (offset_regval >> 16) & 0xFF;
-	val[3] = (offset_regval >> 24) & 0x1F;
+	val[0] = (u8)(offset_regval & 0xFF);
+	val[1] = (u8)((offset_regval >> 8) & 0xFF);
+	val[2] = (u8)((offset_regval >> 16) & 0xFF);
+	val[3] = (u8)((offset_regval >> 24) & 0x1F);
 	val[3] |= PH_OFFSET_EN;
 
 	mutex_lock(idt82p33->lock);
@@ -1037,7 +1037,7 @@ static int idt82p33_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 	err = _idt82p33_adjfine(channel, scaled_ppm);
 
 	if (err == 0)
-		channel->current_freq = scaled_ppm;
+		channel->current_freq = (s32)scaled_ppm;
 	mutex_unlock(idt82p33->lock);
 
 	if (err)
@@ -1058,8 +1058,8 @@ static int idt82p33_adjtime(struct ptp_clock_info *ptp, s64 delta_ns)
 
 	mutex_lock(idt82p33->lock);
 
-	if (abs(delta_ns) < phase_snap_threshold) {
-		err = idt82p33_start_ddco(channel, delta_ns);
+	if ((delta_ns > -phase_snap_threshold) && (delta_ns < phase_snap_threshold)) {
+		err = idt82p33_start_ddco(channel, (s32)delta_ns);
 		mutex_unlock(idt82p33->lock);
 		return err;
 	}
@@ -1141,7 +1141,7 @@ static int idt82p33_channel_init(struct idt82p33 *idt82p33, u32 index)
 		return -EINVAL;
 	}
 
-	channel->plln = index;
+	channel->plln = (u8)index;
 	channel->current_freq = 0;
 	channel->idt82p33 = idt82p33;
 	INIT_DELAYED_WORK(&channel->adjtime_work, idt82p33_adjtime_workaround);
@@ -1152,6 +1152,9 @@ static int idt82p33_channel_init(struct idt82p33 *idt82p33, u32 index)
 static int idt82p33_verify_pin(struct ptp_clock_info *ptp, unsigned int pin,
 			       enum ptp_pin_function func, unsigned int chan)
 {
+	(void)ptp;
+	(void)pin;
+	(void)chan;
 	switch (func) {
 	case PTP_PF_NONE:
 	case PTP_PF_EXTTS:
@@ -1221,7 +1224,7 @@ static int idt82p33_enable_channel(struct idt82p33 *idt82p33, u32 index)
 	channel->ptp_clock = ptp_clock_register(&channel->caps, NULL);
 
 	if (IS_ERR(channel->ptp_clock)) {
-		err = PTR_ERR(channel->ptp_clock);
+		err = (int)PTR_ERR(channel->ptp_clock);
 		channel->ptp_clock = NULL;
 		return err;
 	}
@@ -1283,7 +1286,7 @@ static int idt82p33_load_firmware(struct idt82p33 *idt82p33)
 	struct idt82p33_fwrc *rec;
 	u8 loaddr, page, val;
 	int err;
-	s32 len;
+	size_t len;
 
 	if (firmware) /* module parameter */
 		snprintf(fname, sizeof(fname), "%s", firmware);
@@ -1324,7 +1327,7 @@ static int idt82p33_load_firmware(struct idt82p33 *idt82p33)
 			if (loaddr > 0x7b)
 				continue;
 
-			err = idt82p33_write(idt82p33, REG_ADDR(page, loaddr),
+			err = idt82p33_write(idt82p33, (u16)REG_ADDR(page, loaddr),
 					     &val, sizeof(val));
 		}
 
@@ -1353,17 +1356,17 @@ static void idt82p33_extts_check(struct work_struct *work)
 	mutex_lock(idt82p33->lock);
 
 	for (i = 0; i < MAX_PHC_PLL; i++) {
-		mask = 1 << i;
+		mask = (u8)(1 << i);
 
 		if ((idt82p33->extts_mask & mask) == 0)
 			continue;
 
-		err = idt82p33_extts_check_channel(idt82p33, i);
+		err = idt82p33_extts_check_channel(idt82p33, (u8)i);
 
 		if (err == 0) {
 			/* trigger clears itself, so clear the mask */
 			if (idt82p33->extts_single_shot) {
-				idt82p33->extts_mask &= ~mask;
+				idt82p33->extts_mask &= (u8)(~mask);
 			} else {
 				/* Re-arm */
 				channel = &idt82p33->channel[i];

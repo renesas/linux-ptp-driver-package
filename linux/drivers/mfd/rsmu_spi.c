@@ -226,7 +226,7 @@ static int rsmu_spi_probe(struct spi_device *client)
 
 	rsmu->regmap = devm_regmap_init(&client->dev, NULL, client, cfg);
 	if (IS_ERR(rsmu->regmap)) {
-		ret = PTR_ERR(rsmu->regmap);
+		ret = (int)PTR_ERR(rsmu->regmap);
 		dev_err(rsmu->dev, "Failed to allocate register map: %d\n", ret);
 		return ret;
 	}
