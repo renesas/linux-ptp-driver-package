@@ -106,10 +106,10 @@ static int rsmu_write_page_register(struct rsmu_ddata *rsmu, u32 reg)
 			return 0;
 		page_reg = RSMU_CM_PAGE_ADDR;
 		page = reg & RSMU_PAGE_MASK;
-		buf[0] = (u8)(page & 0xFF);
-		buf[1] = (u8)((page >> 8) & 0xFF);
-		buf[2] = (u8)((page >> 16) & 0xFF);
-		buf[3] = (u8)((page >> 24) & 0xFF);
+		buf[0] = (u8)(page & 0xff);
+		buf[1] = (u8)((page >> 8) & 0xff);
+		buf[2] = (u8)((page >> 16) & 0xff);
+		buf[3] = (u8)((page >> 24) & 0xff);
 		bytes = 4;
 		break;
 	case RSMU_SABRE:
@@ -234,13 +234,11 @@ static int rsmu_spi_probe(struct spi_device *client)
 	return rsmu_core_init(rsmu);
 }
 
-static int rsmu_spi_remove(struct spi_device *client)
+static void rsmu_spi_remove(struct spi_device *client)
 {
 	struct rsmu_ddata *rsmu = spi_get_drvdata(client);
 
 	rsmu_core_exit(rsmu);
-
-	return 0;
 }
 
 static const struct spi_device_id rsmu_spi_id[] = {
@@ -264,7 +262,7 @@ MODULE_DEVICE_TABLE(of, rsmu_spi_of_match);
 static struct spi_driver rsmu_spi_driver = {
 	.driver = {
 		.name = "rsmu-spi",
-		.of_match_table = of_match_ptr(rsmu_spi_of_match),
+		.of_match_table = rsmu_spi_of_match,
 	},
 	.probe = rsmu_spi_probe,
 	.remove	= rsmu_spi_remove,
